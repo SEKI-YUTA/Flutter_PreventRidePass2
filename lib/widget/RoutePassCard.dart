@@ -16,11 +16,11 @@ class RoutePassCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Container(
-        padding: ConstantValues.cardPadding,
+        padding: ConstantValue.cardPadding,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(r.name, style: ConstantValues.titleText),
+            Text(r.name, style: ConstantValue.titleText),
             // Text("緯度: " + p.latitude.toString()),
             // Text("経度: " + p.longitude.toString())
           ],

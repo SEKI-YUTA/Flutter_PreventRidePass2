@@ -15,7 +15,7 @@ class PointCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Container(
-        padding: ConstantValues.cardPadding,
+        padding: ConstantValue.cardPadding,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -24,7 +24,7 @@ class PointCard extends StatelessWidget {
               children: [
                 Text(
                   p.name,
-                  style: ConstantValues.titleText,
+                  style: ConstantValue.titleText,
                 ),
                 IconButton(
                   icon: const Icon(Icons.map_outlined),
