@@ -30,6 +30,7 @@ class PointCard extends StatelessWidget {
                   icon: const Icon(Icons.map_outlined),
                   onPressed: () {
                     // 地図で場所を表示
+                    Navigator.pop(context, p);
                   },
                 )
               ],

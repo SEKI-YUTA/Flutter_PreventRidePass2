@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:io';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,16 +7,17 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart';
 import 'package:prevent_ride_pass2/ConstantValue.dart';
-import 'package:prevent_ride_pass2/model/CurrentLocation.dart';
 import 'package:prevent_ride_pass2/model/Point.dart';
+import 'package:prevent_ride_pass2/model/SavedData.dart';
 import 'package:prevent_ride_pass2/point_list.screen.dart';
 import 'package:prevent_ride_pass2/setting_screen.dart';
+import 'package:prevent_ride_pass2/util/GeneralUtil.dart';
 import 'package:sqflite/sqflite.dart';
 
 // https://github.com/SEKI-YUTA/Flutter_PreventRidePass/blob/master/lib/map_screen.dart
 // https://pub.dev/packages/sqflite
 
-// これはこの画面でしか使う予定はないので共有する必要はない
+// これらはこの画面でしか使う予定はないので共有する必要はない
 final currentLocationProvider = StateProvider<Position>((ref) {
   return Position(
       longitude: 0,
@@ -32,7 +31,7 @@ final currentLocationProvider = StateProvider<Position>((ref) {
 });
 final curretLocationStateProvider = StreamProvider.autoDispose<Position>((ref) {
   LocationSettings locationSettings =
-      LocationSettings(accuracy: LocationAccuracy.best);
+      const LocationSettings(accuracy: LocationAccuracy.best);
   return Geolocator.getPositionStream(locationSettings: locationSettings)
       .map((pos) {
     print("pos ${pos.latitude} ${pos.longitude}");
@@ -41,6 +40,36 @@ final curretLocationStateProvider = StreamProvider.autoDispose<Position>((ref) {
     return pos;
   });
 });
+// これらはこの画面でしか使う予定はないので共有する必要はない
+final savedDataProvider = StateProvider<SavedData>((ref) {
+  return SavedData(pointList: [], routeList: []);
+});
+
+final savedDataStateProvider =
+    FutureProvider.autoDispose<SavedData>((ref) async {
+  if (database == null) {
+    database = await GeneralUtil.getAppDatabase();
+  }
+  // Future<List<Map<String, dynamic>>> dataList =
+  late SavedData data;
+  await database!
+      .rawQuery("select * from ${ConstantValue.pointTable}")
+      .then((value) {
+    List<Point> pointList = List.generate(value.length, (index) {
+      String name = value[index]["name"] as String;
+      double latitude = double.parse(value[index]["latitude"] as String);
+      double longitude = double.parse(value[index]["longitude"] as String);
+      return Point(name: name, latitude: latitude, longitude: longitude);
+    });
+    print(pointList.length);
+    data = SavedData(pointList: pointList, routeList: []);
+    ref.read(savedDataProvider.notifier).state = data;
+  });
+
+  return Future.value(data);
+});
+
+Database? database;
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key, required this.title});
@@ -53,11 +82,12 @@ class MapScreen extends ConsumerStatefulWidget {
 class _MapScreenState extends ConsumerState<MapScreen>
     with WidgetsBindingObserver {
   MapController mapController = MapController();
-  late Database database;
+  // late Database database;
   bool locationEnabled = false;
   int _counter = 0;
   List<Marker> markerList = List.empty(growable: true);
   Marker? pickedMarker = null;
+  Marker? activeMarker = null;
 
   setPickedMarker(LatLng pos) {
     pickedMarker = Marker(
@@ -107,32 +137,42 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return result;
   }
 
+  void setUp() async {
+    locationEnabled = await checkPermission();
+    if (database == null) {
+      database = await GeneralUtil.getAppDatabase();
+    }
+  }
+
+  Future<void> navigateToPointListScreen(BuildContext context) async {
+    final result = await Navigator.of(context).push(MaterialPageRoute(
+        builder: (context) => PointListScreen(
+            type: 1, db: database!, savedDataProvider: savedDataProvider)));
+    if (result == null) return;
+    Point p = result as Point;
+    print("result: ${p.name}");
+    LatLng? lng = pickedMarker?.point;
+    if (lng != null &&
+        lng.latitude == p.latitude &&
+        lng.longitude == p.longitude) {
+      pickedMarker = null;
+    }
+    activeMarker = Marker(
+        point: LatLng(p.latitude, p.longitude),
+        builder: (context) => GestureDetector(
+              child: const Icon(
+                Icons.location_pin,
+                color: Colors.red,
+              ),
+            ));
+    setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     setUp();
-  }
-
-  void setUp() async {
-    locationEnabled = await checkPermission();
-    String dbPath = await getDatabasesPath();
-    String path = join(dbPath, ConstantValue.dbName);
-    database =
-        await openDatabase(path, version: 1, onCreate: (db, version) async {
-      await db.execute(
-          "create table ${ConstantValue.pointTable} (id INTEGER PRIMARY KEY, name TEXT, latitude TEXT, longitude TEXT)");
-    });
-  }
-
-  void insertPoint(Point p) async {
-    if (database == null) return;
-    await database.transaction((txn) async {
-      int insertedId = await txn.rawInsert(
-          "insert into ${ConstantValue.pointTable} (name, latitude, longitude) values (?, ?, ?)",
-          [p.name, p.latitude, p.longitude]);
-      print("inserted id: $insertedId");
-    });
   }
 
   @override
@@ -145,7 +185,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
   @override
   Widget build(BuildContext context) {
     ref.watch(curretLocationStateProvider);
+    ref.watch(savedDataStateProvider);
     final currentLocation = ref.watch(currentLocationProvider);
+    final savedData = ref.watch(savedDataProvider);
+    final savedDataController = ref.read(savedDataProvider.notifier);
     // mapController.move(
     //     LatLng(currentLocation.latitude, currentLocation.longitude), 12);
     var emptyMarker =
@@ -166,10 +209,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
             icon: const Icon(Icons.list_outlined),
             onPressed: () {
               // 登録地点一覧画面へ
-              Navigator.of(context).push(MaterialPageRoute(
-                  builder: (context) => PointListScreen(
-                        type: 1,
-                      )));
+              navigateToPointListScreen(context);
+              // Navigator.of(context).push(MaterialPageRoute(
+              //     builder: (context) => PointListScreen(
+              //           type: 1,
+              //           db: database!,
+              //           savedDataProvider: savedDataProvider,
+              //         )));
             },
           ),
           IconButton(
@@ -179,6 +225,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
               Navigator.of(context).push(MaterialPageRoute(
                   builder: (context) => PointListScreen(
                         type: 2,
+                        db: database!,
+                        savedDataProvider: savedDataProvider,
                       )));
             },
           ),
@@ -209,6 +257,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 MarkerLayer(
                   markers: [
                     pickedMarker ?? emptyMarker,
+                    activeMarker ?? emptyMarker,
                     (currentLocation.latitude != 0 &&
                             currentLocation.longitude != 0)
                         ? Marker(
@@ -249,7 +298,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                   name: editingController.text,
                                   latitude: pickedMarker!.point.latitude,
                                   longitude: pickedMarker!.point.longitude);
-                              insertPoint(p);
+                              // insertPoint(p);
+                              GeneralUtil.insertPoint(database!, p);
+                              List<Point> tmpList = savedData.pointList;
+                              tmpList.add(p);
+                              savedDataController.state = SavedData(
+                                  pointList: tmpList,
+                                  routeList: savedData.routeList);
                               Navigator.of(context).pop();
                             },
                             child: const Text("追加")),
