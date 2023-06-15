@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -14,6 +15,7 @@ import 'package:prevent_ride_pass2/setting_screen.dart';
 import 'package:prevent_ride_pass2/util/GeneralUtil.dart';
 import 'package:prevent_ride_pass2/widget/LoadingWidget.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:http/http.dart' as http;
 
 // https://github.com/SEKI-YUTA/Flutter_PreventRidePass/blob/master/lib/map_screen.dart
 // https://pub.dev/packages/sqflite
@@ -87,6 +89,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
   bool locationEnabled = false;
   bool networkConnect = false;
   bool loading = true;
+  List<dynamic>? searchResult = null;
+  TextEditingController searchInputController = TextEditingController();
 
   int _counter = 0;
   List<Marker> markerList = List.empty(growable: true);
@@ -179,7 +183,23 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 color: Colors.red,
               ),
             ));
+    mapController.move(LatLng(p.latitude, p.longitude), mapController.zoom);
     setState(() {});
+  }
+
+  Future<void> searchPlace(String query) {
+    String url = ConstantValue.GASbaseURL + "?query=" + query;
+    return http.get(Uri.parse(url)).then((value) {
+      Map<String, dynamic> jsonData = json.decode(value.body);
+      List<dynamic> tmpList = (jsonData['results']);
+      if (jsonData['status'].toLowerCase() == "ok") {
+        searchResult = tmpList;
+        print("found ${jsonData['results'].length}");
+        print(
+            "found ${jsonData['results'][0]['address_components'][0]['long_name']}");
+        setState(() {});
+      }
+    });
   }
 
   @override
@@ -299,28 +319,71 @@ class _MapScreenState extends ConsumerState<MapScreen>
             Align(
               alignment: AlignmentDirectional.topCenter,
               child: Container(
-                padding: ConstantValue.cardPadding,
-                child: Container(
-                  decoration: BoxDecoration(color: Colors.white),
-                  child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: MediaQuery.of(context).size.width - 80,
-                          child: TextField(
-                            decoration:
-                                ConstantValue.createPlaceholderDecoration(
-                                    "場所を検索"),
-                          ),
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.search_outlined),
-                          onPressed: () {},
-                        )
-                      ]),
-                ),
+                margin: const EdgeInsets.only(top: 8),
+                decoration: BoxDecoration(color: Colors.white),
+                child:
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Container(
+                    padding: ConstantValue.p8,
+                    height: 66,
+                    width: MediaQuery.of(context).size.width - 80,
+                    child: TextField(
+                        controller: searchInputController,
+                        style: const TextStyle(fontSize: 18),
+                        decoration: InputDecoration(
+                            contentPadding: ConstantValue.p8,
+                            hintText: "場所を検索",
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10)))),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.search_outlined),
+                    onPressed: () {
+                      print(searchInputController.text);
+                      searchPlace(searchInputController.text);
+                    },
+                  )
+                ]),
               ),
             ),
+            searchResult != null
+                ? Positioned(
+                    bottom: 0,
+                    child: Container(
+                      height: 300,
+                      width: MediaQuery.of(context).size.width,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: searchResult!.length,
+                        itemBuilder: (context, index) {
+                          Map<String, dynamic> itemData = searchResult![index];
+                          // print(
+                          //     );
+                          String building_name =
+                              itemData['address_components'][0]['short_name'];
+                          String address = itemData['formatted_address'];
+
+                          return Card(
+                            child: Container(
+                              width: MediaQuery.of(context).size.width * 0.8,
+                              height: 300,
+                              child: Column(children: [
+                                Text(
+                                  building_name,
+                                  style: ConstantValue.titleText,
+                                ),
+                                Text(
+                                  address,
+                                  style: ConstantValue.normalText,
+                                )
+                              ]),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  )
+                : Container()
           ],
         ),
       ),
