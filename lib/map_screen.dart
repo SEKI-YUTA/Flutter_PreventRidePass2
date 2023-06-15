@@ -51,9 +51,7 @@ final savedDataProvider = StateProvider<SavedData>((ref) {
 
 final savedDataStateProvider =
     FutureProvider.autoDispose<SavedData>((ref) async {
-  if (database == null) {
-    database = await GeneralUtil.getAppDatabase();
-  }
+  database ??= await GeneralUtil.getAppDatabase();
   // Future<List<Map<String, dynamic>>> dataList =
   late SavedData data;
   Future f1 = database!
@@ -109,6 +107,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   bool loading = true;
   bool isSearching = false;
   bool isMapReady = false;
+  bool isTracking = true;
   List<dynamic>? searchResult = null;
   TextEditingController searchInputController = TextEditingController();
 
@@ -217,6 +216,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   Future<void> searchPlace(String query) {
+    if (query == "") return Future.value();
     isSearching = true;
     setState(() {});
     String url = ConstantValue.GASbaseURL + "?query=" + query;
@@ -263,7 +263,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // mapController.move(
     //     LatLng(currentLocation.latitude, currentLocation.longitude), 12);
     // print("build ${currentLocation.latitude} ${currentLocation.longitude}");
-    if (isMapReady) {
+    print("isTracking $isTracking");
+    if (isMapReady && isTracking) {
+      print("center move");
       mapController!.move(
           LatLng(currentLocation.latitude, currentLocation.longitude),
           mapController!.zoom);
@@ -275,259 +277,287 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // }
     // Marker(point: LatLng(1, 1), builder: (context) => Container());
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.settings_outlined),
-          onPressed: () {
-            // 設定画面へ遷移
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (context) => SettingScreen(),
-            ));
-          },
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.list_outlined),
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.settings_outlined),
             onPressed: () {
-              // 登録地点一覧画面へ
-              navigateToPointListScreen(context);
-              // Navigator.of(context).push(MaterialPageRoute(
-              //     builder: (context) => PointListScreen(
-              //           type: 1,
-              //           db: database!,
-              //           savedDataProvider: savedDataProvider,
-              //         )));
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.route_outlined),
-            onPressed: () {
-              // 登録ルート一覧へ
+              // 設定画面へ遷移
               Navigator.of(context).push(MaterialPageRoute(
-                  builder: (context) => PointListScreen(
-                        type: 2,
-                        db: database!,
-                        savedDataProvider: savedDataProvider,
-                      )));
+                builder: (context) => SettingScreen(),
+              ));
             },
           ),
-        ],
-      ),
-      body: Center(
-        child: Stack(
-          children: <Widget>[
-            loading
-                ? LoadingWidget()
-                : networkConnect && locationEnabled
-                    ? FlutterMap(
-                        mapController: mapController,
-                        options: MapOptions(
-                            onMapReady: () {
-                              print("on Map ready");
-                              isMapReady = true;
-                              mapController!.move(
-                                  LatLng(currentLocation.latitude,
-                                      currentLocation.longitude),
-                                  mapController!.zoom);
-                            },
-                            onMapEvent: (MapEvent p0) {
-                              print(p0);
-                            },
-                            center: ConstantValue.defaultLocation,
-                            onPositionChanged: (position, hasGesture) {
-                              print("position changed");
-                            },
-                            onTap: (tapPosition, point) {
-                              print("tapped");
-                              setPickedMarker(point);
-                              setState(() {});
-                            },
-                            interactiveFlags: InteractiveFlag.all,
-                            enableScrollWheel: true,
-                            scrollWheelVelocity: 0.00001),
-                        children: [
-                          TileLayer(
-                            urlTemplate:
-                                // 'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
-                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          ),
-                          MarkerLayer(
-                            markers: [
-                              pickedMarker ?? emptyMarker,
-                              activeMarker ?? emptyMarker,
-                              (currentLocation.latitude != 0 &&
-                                      currentLocation.longitude != 0)
-                                  ? Marker(
-                                      point: LatLng(currentLocation.latitude,
-                                          currentLocation.longitude),
-                                      builder: (context) {
-                                        print("current location marker");
-                                        print(
-                                            "controller rotation: ${mapController!.rotation}");
-                                        return RotationTransition(
-                                          turns: AlwaysStoppedAnimation(-1 *
-                                              (mapController!.rotation / 360)),
-                                          child: const Icon(
-                                              Icons.person_pin_outlined),
-                                        );
-                                      },
-                                    )
-                                  : emptyMarker
-                            ],
-                          )
-                        ],
-                      )
-                    : MessageWidget(
-                        netState: networkConnect,
-                        permissionState: locationEnabled),
-            // 検索バー
-            Align(
-              alignment: AlignmentDirectional.topCenter,
-              child: Container(
-                margin: const EdgeInsets.only(top: 8),
-                decoration: BoxDecoration(color: Colors.white),
-                child:
-                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Container(
-                    padding: ConstantValue.p8,
-                    height: 66,
-                    width: MediaQuery.of(context).size.width - 80,
-                    child: TextField(
-                        controller: searchInputController,
-                        style: const TextStyle(fontSize: 18),
-                        decoration: InputDecoration(
-                            contentPadding: ConstantValue.p8,
-                            hintText: "場所を検索",
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10)))),
-                  ),
-                  !isSearching
-                      ? IconButton(
-                          icon: Icon(Icons.search_outlined),
-                          onPressed: () {
-                            print(searchInputController.text);
-                            searchPlace(searchInputController.text);
-                          },
-                        )
-                      : CircularProgressIndicator()
-                ]),
-              ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.list_outlined),
+              onPressed: () {
+                // 登録地点一覧画面へ
+                navigateToPointListScreen(context);
+                // Navigator.of(context).push(MaterialPageRoute(
+                //     builder: (context) => PointListScreen(
+                //           type: 1,
+                //           db: database!,
+                //           savedDataProvider: savedDataProvider,
+                //         )));
+              },
             ),
-            searchResult != null
-                ? AnimatedPositioned(
-                    duration: const Duration(seconds: 1),
-                    bottom: searchResult == null ? -300 : 20,
-                    child: Container(
-                      height: 200,
-                      width: MediaQuery.of(context).size.width,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: searchResult!.length,
-                        itemBuilder: (context, index) {
-                          Map<String, dynamic> itemData = searchResult![index];
-                          // print(
-                          //     );
-                          String building_name =
-                              itemData['address_components'][0]['short_name'];
-                          String address = itemData['formatted_address'];
-                          // print(itemData['geometry']['location']['lat']);
-
-                          double lat =
-                              itemData['geometry']['location']['lat'] as double;
-                          double lon =
-                              itemData['geometry']['location']['lng'] as double;
-
-                          return Card(
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
-                            child: GestureDetector(
-                              onTap: () {
-                                mapController!.move(
-                                    LatLng(lat, lon), mapController!.zoom);
-                              },
-                              child: Container(
-                                padding: ConstantValue.cardPadding,
-                                width: MediaQuery.of(context).size.width * 0.8,
-                                height: 200,
-                                child: Column(children: [
-                                  Text(
-                                    building_name,
-                                    style: ConstantValue.titleText,
-                                  ),
-                                  Text(
-                                    address,
-                                    style: TextStyle(fontSize: 14),
-                                  )
-                                ]),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  )
-                : Container()
+            IconButton(
+              icon: const Icon(Icons.route_outlined),
+              onPressed: () {
+                // 登録ルート一覧へ
+                Navigator.of(context).push(MaterialPageRoute(
+                    builder: (context) => PointListScreen(
+                          type: 2,
+                          db: database!,
+                          savedDataProvider: savedDataProvider,
+                        )));
+              },
+            ),
           ],
         ),
-      ),
-      floatingActionButton: pickedMarker != null
-          ? FloatingActionButton(
-              onPressed: () {
-                // 追加メニューを下から表示
-                showDialog(
-                  context: context,
-                  builder: (context) {
-                    TextEditingController editingController =
-                        TextEditingController();
-                    return AlertDialog(
-                      title: const Text("場所を登録"),
-                      actions: [
-                        TextButton(
-                            onPressed: () {
-                              if (pickedMarker == null) return;
-                              // 追加
-                              print("name: " + editingController.text);
-                              print(
-                                  "latitude: ${pickedMarker?.point.latitude} longitude: ${pickedMarker?.point.longitude}");
-                              Point p = Point(
-                                  name: editingController.text,
-                                  latitude: pickedMarker!.point.latitude,
-                                  longitude: pickedMarker!.point.longitude);
-                              // insertPoint(p);
-                              GeneralUtil.insertPoint(database!, p);
-                              List<Point> tmpList = savedData.pointList;
-                              tmpList.add(p);
-                              savedDataController.state = SavedData(
-                                  pointList: tmpList,
-                                  routeList: savedData.routeList);
-                              Navigator.of(context).pop();
-                            },
-                            child: const Text("追加")),
-                        TextButton(
-                            onPressed: () {
-                              // キャンセル
-                              Navigator.of(context).pop();
-                            },
-                            child: const Text("キャンセル")),
-                      ],
-                      content:
-                          Column(mainAxisSize: MainAxisSize.min, children: [
-                        Container(
-                          child: TextField(
-                              decoration:
-                                  ConstantValue.createPlaceholderDecoration(
-                                      "場所の名前"),
-                              controller: editingController),
+        body: Center(
+          child: Stack(
+            children: <Widget>[
+              loading
+                  ? LoadingWidget()
+                  : networkConnect && locationEnabled
+                      ? FlutterMap(
+                          mapController: mapController,
+                          options: MapOptions(
+                              onMapReady: () {
+                                print("on Map ready");
+                                isMapReady = true;
+                                mapController!.move(
+                                    LatLng(currentLocation.latitude,
+                                        currentLocation.longitude),
+                                    mapController!.zoom);
+                              },
+                              onMapEvent: (MapEvent p0) {
+                                // print(p0);
+                                if (p0 is MapEventMove &&
+                                    p0.source == MapEventSource.onDrag) {
+                                  isTracking = false;
+                                  setState(() {});
+                                }
+                              },
+                              center: ConstantValue.defaultLocation,
+                              onPositionChanged: (position, hasGesture) {
+                                print("position changed");
+                              },
+                              onTap: (tapPosition, point) {
+                                print("tapped");
+                                setPickedMarker(point);
+                                setState(() {});
+                              },
+                              interactiveFlags: InteractiveFlag.all,
+                              enableScrollWheel: true,
+                              scrollWheelVelocity: 0.00001),
+                          children: [
+                            TileLayer(
+                              urlTemplate:
+                                  // 'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
+                                  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            ),
+                            MarkerLayer(
+                              markers: [
+                                pickedMarker ?? emptyMarker,
+                                activeMarker ?? emptyMarker,
+                                (currentLocation.latitude != 0 &&
+                                        currentLocation.longitude != 0)
+                                    ? Marker(
+                                        point: LatLng(currentLocation.latitude,
+                                            currentLocation.longitude),
+                                        builder: (context) {
+                                          print("current location marker");
+                                          print(
+                                              "controller rotation: ${mapController!.rotation}");
+                                          return RotationTransition(
+                                            turns: AlwaysStoppedAnimation(-1 *
+                                                (mapController!.rotation /
+                                                    360)),
+                                            child: const Icon(
+                                                Icons.person_pin_outlined),
+                                          );
+                                        },
+                                      )
+                                    : emptyMarker
+                              ],
+                            )
+                          ],
                         )
+                      : MessageWidget(
+                          netState: networkConnect,
+                          permissionState: locationEnabled),
+              // 検索バー
+              Align(
+                alignment: AlignmentDirectional.topCenter,
+                child: Container(
+                  decoration: BoxDecoration(color: Colors.white),
+                  child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: ConstantValue.p8,
+                          height: 66,
+                          width: MediaQuery.of(context).size.width - 80,
+                          child: TextField(
+                              controller: searchInputController,
+                              style: const TextStyle(fontSize: 18),
+                              decoration: InputDecoration(
+                                  contentPadding: ConstantValue.p8,
+                                  hintText: "場所を検索",
+                                  border: OutlineInputBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(10)))),
+                        ),
+                        !isSearching
+                            ? IconButton(
+                                icon: Icon(Icons.search_outlined),
+                                onPressed: () {
+                                  print(searchInputController.text);
+                                  searchPlace(searchInputController.text);
+                                },
+                              )
+                            : CircularProgressIndicator()
                       ]),
-                    );
-                  },
-                );
+                ),
+              ),
+              searchResult != null
+                  ? AnimatedPositioned(
+                      duration: const Duration(seconds: 1),
+                      bottom: searchResult == null ? -300 : 20,
+                      child: Container(
+                        height: 200,
+                        width: MediaQuery.of(context).size.width,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: searchResult!.length,
+                          itemBuilder: (context, index) {
+                            Map<String, dynamic> itemData =
+                                searchResult![index];
+                            // print(
+                            //     );
+                            String building_name =
+                                itemData['address_components'][0]['short_name'];
+                            String address = itemData['formatted_address'];
+                            // print(itemData['geometry']['location']['lat']);
+
+                            double lat = itemData['geometry']['location']['lat']
+                                as double;
+                            double lon = itemData['geometry']['location']['lng']
+                                as double;
+
+                            return Card(
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                              child: GestureDetector(
+                                onTap: () {
+                                  mapController!.move(
+                                      LatLng(lat, lon), mapController!.zoom);
+                                },
+                                child: Container(
+                                  padding: ConstantValue.cardPadding,
+                                  width:
+                                      MediaQuery.of(context).size.width * 0.8,
+                                  height: 200,
+                                  child: Column(children: [
+                                    Text(
+                                      building_name,
+                                      style: ConstantValue.titleText,
+                                    ),
+                                    Text(
+                                      address,
+                                      style: TextStyle(fontSize: 14),
+                                    )
+                                  ]),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    )
+                  : Container()
+            ],
+          ),
+        ),
+        floatingActionButton: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            pickedMarker != null
+                ? FloatingActionButton(
+                    onPressed: () {
+                      // 追加メニューを下から表示
+                      showDialog(
+                        context: context,
+                        builder: (context) {
+                          TextEditingController editingController =
+                              TextEditingController();
+                          return AlertDialog(
+                            title: const Text("場所を登録"),
+                            actions: [
+                              TextButton(
+                                  onPressed: () {
+                                    if (pickedMarker == null) return;
+                                    // 追加
+                                    print("name: " + editingController.text);
+                                    print(
+                                        "latitude: ${pickedMarker?.point.latitude} longitude: ${pickedMarker?.point.longitude}");
+                                    Point p = Point(
+                                        name: editingController.text,
+                                        latitude: pickedMarker!.point.latitude,
+                                        longitude:
+                                            pickedMarker!.point.longitude);
+                                    // insertPoint(p);
+                                    GeneralUtil.insertPoint(database!, p);
+                                    List<Point> tmpList = savedData.pointList;
+                                    tmpList.add(p);
+                                    savedDataController.state = SavedData(
+                                        pointList: tmpList,
+                                        routeList: savedData.routeList);
+                                    Navigator.of(context).pop();
+                                  },
+                                  child: const Text("追加")),
+                              TextButton(
+                                  onPressed: () {
+                                    // キャンセル
+                                    Navigator.of(context).pop();
+                                  },
+                                  child: const Text("キャンセル")),
+                            ],
+                            content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    child: TextField(
+                                        decoration: ConstantValue
+                                            .createPlaceholderDecoration(
+                                                "場所の名前"),
+                                        controller: editingController),
+                                  )
+                                ]),
+                          );
+                        },
+                      );
+                    },
+                    child: const Icon(Icons.add),
+                  )
+                : Container(),
+            SizedBox(
+              height: 12,
+            ),
+            FloatingActionButton(
+              child: Icon(isTracking
+                  ? Icons.my_location_outlined
+                  : Icons.location_disabled_outlined),
+              onPressed: () {
+                isTracking = true;
+                setState(() {});
               },
-              child: const Icon(Icons.add),
-            )
-          : Container(),
-    );
+            ),
+          ],
+        ));
   }
 }
 
