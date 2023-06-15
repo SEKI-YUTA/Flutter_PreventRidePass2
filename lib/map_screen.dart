@@ -4,11 +4,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart';
 import 'package:prevent_ride_pass2/ConstantValue.dart';
 import 'package:prevent_ride_pass2/model/Point.dart';
+import 'package:prevent_ride_pass2/model/Route.dart';
 import 'package:prevent_ride_pass2/model/SavedData.dart';
 import 'package:prevent_ride_pass2/point_list.screen.dart';
 import 'package:prevent_ride_pass2/setting_screen.dart';
@@ -37,7 +39,6 @@ final curretLocationStateProvider = StreamProvider.autoDispose<Position>((ref) {
       const LocationSettings(accuracy: LocationAccuracy.best);
   return Geolocator.getPositionStream(locationSettings: locationSettings)
       .map((pos) {
-    print("pos ${pos.latitude} ${pos.longitude}");
     ref.read(currentLocationProvider.notifier).state = pos;
     print("lat: ${pos.latitude} lon: ${pos.longitude}");
     return pos;
@@ -55,7 +56,7 @@ final savedDataStateProvider =
   }
   // Future<List<Map<String, dynamic>>> dataList =
   late SavedData data;
-  await database!
+  Future f1 = database!
       .rawQuery("select * from ${ConstantValue.pointTable}")
       .then((value) {
     List<Point> pointList = List.generate(value.length, (index) {
@@ -64,11 +65,27 @@ final savedDataStateProvider =
       double longitude = double.parse(value[index]["longitude"] as String);
       return Point(name: name, latitude: latitude, longitude: longitude);
     });
-    print(pointList.length);
+    print("pointList size: ${pointList.length}");
     data = SavedData(pointList: pointList, routeList: []);
     ref.read(savedDataProvider.notifier).state = data;
   });
 
+  // Future f2 = database!
+  //     .rawQuery("select * from ${ConstantValue.routeTable}")
+  //     .then((value) {
+  //   List<RoutePass> routeList = List.generate(value.length, (index) {
+  //     String name = value[index]["name"] as String;
+  //     List<Point> pointList = value[index]["pointList"] as List<Point>;
+  //     return RoutePass(name: name, pointList: pointList);
+  //   });
+  //   print("routeList size: ${routeList.length}");
+  // });
+
+  // await Future.wait([f1, f2]).then((value) {
+  //   data = SavedData(pointList: value[0], routeList: value[1]);
+  //   ref.read(savedDataProvider.notifier).state = data;
+  // });
+  await f1;
   return Future.value(data);
 });
 
@@ -89,6 +106,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   bool locationEnabled = false;
   bool networkConnect = false;
   bool loading = true;
+  bool isSearching = false;
   List<dynamic>? searchResult = null;
   TextEditingController searchInputController = TextEditingController();
 
@@ -96,6 +114,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
   List<Marker> markerList = List.empty(growable: true);
   Marker? pickedMarker = null;
   Marker? activeMarker = null;
+
+  Marker emptyMarker =
+      Marker(point: LatLng(0, 0), builder: (context) => Container());
 
   setPickedMarker(LatLng pos) {
     pickedMarker = Marker(
@@ -147,9 +168,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   void setUp() async {
     // locationEnabled = await checkPermission();
-    if (database == null) {
-      database = await GeneralUtil.getAppDatabase();
-    }
+    database ??= await GeneralUtil.getAppDatabase();
 
     Future<bool> networkConnectFuture = GeneralUtil.checkNetworkConnect();
     Future<bool> permissionStateFuture = checkPermission();
@@ -159,6 +178,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       networkConnect = resultList[0];
       locationEnabled = resultList[1];
       loading = false;
+      setState(() {});
     });
   }
 
@@ -188,6 +208,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   Future<void> searchPlace(String query) {
+    isSearching = true;
+    setState(() {});
     String url = ConstantValue.GASbaseURL + "?query=" + query;
     return http.get(Uri.parse(url)).then((value) {
       Map<String, dynamic> jsonData = json.decode(value.body);
@@ -197,8 +219,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
         print("found ${jsonData['results'].length}");
         print(
             "found ${jsonData['results'][0]['address_components'][0]['long_name']}");
-        setState(() {});
+      } else {
+        searchResult = null;
+        Fluttertoast.showToast(msg: "該当する場所が見つかりませんでした");
       }
+      isSearching = false;
+      setState(() {});
     });
   }
 
@@ -225,8 +251,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final savedDataController = ref.read(savedDataProvider.notifier);
     // mapController.move(
     //     LatLng(currentLocation.latitude, currentLocation.longitude), 12);
-    var emptyMarker =
-        Marker(point: LatLng(1, 1), builder: (context) => Container());
+    print("build ${currentLocation.latitude} ${currentLocation.longitude}");
+
+    // Marker(point: LatLng(1, 1), builder: (context) => Container());
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -291,7 +318,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         children: [
                           TileLayer(
                             urlTemplate:
-                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
+                            // 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                           ),
                           MarkerLayer(
                             markers: [
@@ -303,6 +331,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                       point: LatLng(currentLocation.latitude,
                                           currentLocation.longitude),
                                       builder: (context) {
+                                        print("current location marker");
                                         return const Icon(
                                             Icons.person_pin_outlined);
                                       },
@@ -336,21 +365,24 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10)))),
                   ),
-                  IconButton(
-                    icon: Icon(Icons.search_outlined),
-                    onPressed: () {
-                      print(searchInputController.text);
-                      searchPlace(searchInputController.text);
-                    },
-                  )
+                  !isSearching
+                      ? IconButton(
+                          icon: Icon(Icons.search_outlined),
+                          onPressed: () {
+                            print(searchInputController.text);
+                            searchPlace(searchInputController.text);
+                          },
+                        )
+                      : CircularProgressIndicator()
                 ]),
               ),
             ),
             searchResult != null
-                ? Positioned(
-                    bottom: 0,
+                ? AnimatedPositioned(
+                    duration: const Duration(seconds: 1),
+                    bottom: searchResult == null ? -300 : 20,
                     child: Container(
-                      height: 300,
+                      height: 200,
                       width: MediaQuery.of(context).size.width,
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
@@ -362,21 +394,36 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           String building_name =
                               itemData['address_components'][0]['short_name'];
                           String address = itemData['formatted_address'];
+                          // print(itemData['geometry']['location']['lat']);
+
+                          double lat =
+                              itemData['geometry']['location']['lat'] as double;
+                          double lon =
+                              itemData['geometry']['location']['lng'] as double;
 
                           return Card(
-                            child: Container(
-                              width: MediaQuery.of(context).size.width * 0.8,
-                              height: 300,
-                              child: Column(children: [
-                                Text(
-                                  building_name,
-                                  style: ConstantValue.titleText,
-                                ),
-                                Text(
-                                  address,
-                                  style: ConstantValue.normalText,
-                                )
-                              ]),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                            child: GestureDetector(
+                              onTap: () {
+                                mapController.move(
+                                    LatLng(lat, lon), mapController.zoom);
+                              },
+                              child: Container(
+                                padding: ConstantValue.cardPadding,
+                                width: MediaQuery.of(context).size.width * 0.8,
+                                height: 200,
+                                child: Column(children: [
+                                  Text(
+                                    building_name,
+                                    style: ConstantValue.titleText,
+                                  ),
+                                  Text(
+                                    address,
+                                    style: TextStyle(fontSize: 14),
+                                  )
+                                ]),
+                              ),
                             ),
                           );
                         },

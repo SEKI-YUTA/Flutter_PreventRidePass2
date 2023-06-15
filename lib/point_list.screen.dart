@@ -62,32 +62,34 @@ class _PointListScreenState extends ConsumerState<PointListScreen> {
                 },
               ),
       ),
-      floatingActionButton: FloatingActionButton(
-        child: const Icon(Icons.add),
-        onPressed: () {
-          showDialog(
-              context: context,
-              builder: (context) {
-                return AlertDialog(
-                  title: Text("ルートを作成"),
-                  actions: [
-                    TextButton(onPressed: () {}, child: Text("追加")),
-                    TextButton(onPressed: () {}, child: Text("キャンセル"))
-                  ],
-                  content: Column(children: [
-                    Container(
-                      height: 100,
-                      child: Text("選択した位置を表示するリスト"),
-                    ),
-                    Container(
-                      height: 100,
-                      child: Text("登録している地点のリスト"),
-                    ),
-                  ]),
-                );
-              });
-        },
-      ),
+      floatingActionButton: widget.type == 2
+          ? FloatingActionButton(
+              child: const Icon(Icons.add),
+              onPressed: () {
+                showDialog(
+                    context: context,
+                    builder: (context) {
+                      return AlertDialog(
+                        title: Text("ルートを作成"),
+                        actions: [
+                          TextButton(onPressed: () {}, child: Text("追加")),
+                          TextButton(onPressed: () {}, child: Text("キャンセル"))
+                        ],
+                        content: Column(children: [
+                          Container(
+                            height: 100,
+                            child: Text("選択した位置を表示するリスト"),
+                          ),
+                          Container(
+                            height: 100,
+                            child: Text("登録している地点のリスト"),
+                          ),
+                        ]),
+                      );
+                    });
+              },
+            )
+          : Container(),
     );
   }
 }

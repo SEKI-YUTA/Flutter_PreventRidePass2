@@ -40,6 +40,8 @@ class GeneralUtil {
         await openDatabase(path, version: 1, onCreate: (db, version) async {
       await db.execute(
           "create table ${ConstantValue.pointTable} (id INTEGER PRIMARY KEY, name TEXT, latitude TEXT, longitude TEXT)");
+      await db.execute(
+          "create table ${ConstantValue.routeTable} (id INTEGER PRIMARY KEY, name TEXT, latitude TEXT, longitude TEXT)");
     });
 
     return database;
