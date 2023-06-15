@@ -90,6 +90,7 @@ final savedDataStateProvider =
 });
 
 Database? database;
+// MapController? mapController;
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key, required this.title});
@@ -101,12 +102,13 @@ class MapScreen extends ConsumerStatefulWidget {
 
 class _MapScreenState extends ConsumerState<MapScreen>
     with WidgetsBindingObserver {
-  MapController mapController = MapController();
   // late Database database;
+  MapController? mapController;
   bool locationEnabled = false;
   bool networkConnect = false;
   bool loading = true;
   bool isSearching = false;
+  bool isMapReady = false;
   List<dynamic>? searchResult = null;
   TextEditingController searchInputController = TextEditingController();
 
@@ -122,7 +124,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
     pickedMarker = Marker(
         point: pos,
         builder: (context) => GestureDetector(
-              child: Icon(Icons.location_on_outlined),
+              child: RotationTransition(
+                  turns: AlwaysStoppedAnimation(
+                      -1 * (mapController!.rotation / 360)),
+                  child: Icon(Icons.location_on_outlined)),
               onLongPress: () {
                 pickedMarker = null;
                 setState(() {});
@@ -197,13 +202,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
     activeMarker = Marker(
         point: LatLng(p.latitude, p.longitude),
-        builder: (context) => GestureDetector(
-              child: const Icon(
-                Icons.location_pin,
-                color: Colors.red,
+        builder: (context) => RotationTransition(
+              turns:
+                  AlwaysStoppedAnimation(-1 * (mapController!.rotation / 360)),
+              child: GestureDetector(
+                child: const Icon(
+                  Icons.location_pin,
+                  color: Colors.red,
+                ),
               ),
             ));
-    mapController.move(LatLng(p.latitude, p.longitude), mapController.zoom);
+    mapController!.move(LatLng(p.latitude, p.longitude), mapController!.zoom);
     setState(() {});
   }
 
@@ -231,6 +240,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   @override
   void initState() {
     super.initState();
+    mapController = MapController();
     WidgetsBinding.instance.addObserver(this);
     setUp();
   }
@@ -240,6 +250,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // TODO: implement dispose
     super.dispose();
     WidgetsBinding.instance.removeObserver(this);
+    mapController?.dispose();
   }
 
   @override
@@ -251,8 +262,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final savedDataController = ref.read(savedDataProvider.notifier);
     // mapController.move(
     //     LatLng(currentLocation.latitude, currentLocation.longitude), 12);
-    print("build ${currentLocation.latitude} ${currentLocation.longitude}");
-
+    // print("build ${currentLocation.latitude} ${currentLocation.longitude}");
+    if (isMapReady) {
+      mapController!.move(
+          LatLng(currentLocation.latitude, currentLocation.longitude),
+          mapController!.zoom);
+    }
+    // if (mapController.state.mounted) {
+    //   mapController.move(
+    //       LatLng(currentLocation.latitude, currentLocation.longitude),
+    //       mapController.zoom);
+    // }
     // Marker(point: LatLng(1, 1), builder: (context) => Container());
     return Scaffold(
       appBar: AppBar(
@@ -302,8 +322,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     ? FlutterMap(
                         mapController: mapController,
                         options: MapOptions(
-                            center:
-                                LatLng(34.70880958006056, 135.64355656940705),
+                            onMapReady: () {
+                              print("on Map ready");
+                              isMapReady = true;
+                              mapController!.move(
+                                  LatLng(currentLocation.latitude,
+                                      currentLocation.longitude),
+                                  mapController!.zoom);
+                            },
+                            onMapEvent: (MapEvent p0) {
+                              print(p0);
+                            },
+                            center: ConstantValue.defaultLocation,
                             onPositionChanged: (position, hasGesture) {
                               print("position changed");
                             },
@@ -318,8 +348,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         children: [
                           TileLayer(
                             urlTemplate:
-                                'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
-                            // 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                // 'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                           ),
                           MarkerLayer(
                             markers: [
@@ -332,8 +362,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                           currentLocation.longitude),
                                       builder: (context) {
                                         print("current location marker");
-                                        return const Icon(
-                                            Icons.person_pin_outlined);
+                                        print(
+                                            "controller rotation: ${mapController!.rotation}");
+                                        return RotationTransition(
+                                          turns: AlwaysStoppedAnimation(-1 *
+                                              (mapController!.rotation / 360)),
+                                          child: const Icon(
+                                              Icons.person_pin_outlined),
+                                        );
                                       },
                                     )
                                   : emptyMarker
@@ -406,8 +442,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 borderRadius: BorderRadius.circular(10)),
                             child: GestureDetector(
                               onTap: () {
-                                mapController.move(
-                                    LatLng(lat, lon), mapController.zoom);
+                                mapController!.move(
+                                    LatLng(lat, lon), mapController!.zoom);
                               },
                               child: Container(
                                 padding: ConstantValue.cardPadding,
