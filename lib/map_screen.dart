@@ -207,7 +207,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               child: GestureDetector(
                 child: const Icon(
                   Icons.location_pin,
-                  color: Colors.red,
+                  color: Colors.blue,
                 ),
               ),
             ));
@@ -270,6 +270,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
           LatLng(currentLocation.latitude, currentLocation.longitude),
           mapController!.zoom);
     }
+
+    List<Marker> acitvePointMarkerList = savedData.pointList
+        .where((element) => element.isActive)
+        .map((point) => Marker(
+              point: LatLng(point.latitude, point.longitude),
+              builder: (context) => const Icon(
+                Icons.location_on_outlined,
+                color: Colors.red,
+              ),
+            ))
+        .toList();
     // if (mapController.state.mounted) {
     //   mapController.move(
     //       LatLng(currentLocation.latitude, currentLocation.longitude),
@@ -362,6 +373,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               markers: [
                                 pickedMarker ?? emptyMarker,
                                 activeMarker ?? emptyMarker,
+                                ...acitvePointMarkerList,
                                 (currentLocation.latitude != 0 &&
                                         currentLocation.longitude != 0)
                                     ? Marker(
@@ -487,6 +499,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
           children: [
             pickedMarker != null
                 ? FloatingActionButton(
+                    heroTag: "fab_add",
                     onPressed: () {
                       // 追加メニューを下から表示
                       showDialog(
@@ -548,6 +561,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               height: 12,
             ),
             FloatingActionButton(
+              heroTag: "fab_track",
               child: Icon(isTracking
                   ? Icons.my_location_outlined
                   : Icons.location_disabled_outlined),

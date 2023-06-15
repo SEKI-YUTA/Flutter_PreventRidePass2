@@ -4,18 +4,22 @@ import 'package:prevent_ride_pass2/ConstantValue.dart';
 import 'package:prevent_ride_pass2/model/Point.dart';
 
 class PointCard extends StatefulWidget {
-  PointCard({
-    super.key,
-    required this.p,
-  });
+  PointCard({super.key, required this.p, required this.changeActiveState});
   final Point p;
+  Function changeActiveState;
 
   @override
   State<PointCard> createState() => _PointCardState();
 }
 
 class _PointCardState extends State<PointCard> {
-  bool active = false;
+  late bool active;
+
+  @override
+  void initState() {
+    // TODO: implement initState
+    active = widget.p.isActive;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,6 +58,7 @@ class _PointCardState extends State<PointCard> {
                     value: active,
                     onChanged: (val) => setState(() {
                           active = val;
+                          widget.changeActiveState(val);
                         }))
               ],
             )

@@ -51,7 +51,19 @@ class _PointListScreenState extends ConsumerState<PointListScreen> {
                 itemCount: savedData.pointList.length,
                 itemBuilder: (context, index) {
                   Point p = savedData.pointList[index];
-                  return PointCard(p: p);
+                  print("$index ${p.isActive}");
+                  return PointCard(
+                    p: p,
+                    changeActiveState: (bool newState) {
+                      List<RoutePass> routeList = savedData.routeList;
+                      List<Point> pointList = savedData.pointList;
+                      Point newP = pointList[index];
+                      newP.isActive = newState;
+                      pointList[index] = newP;
+                      savedDataController.state =
+                          SavedData(pointList: pointList, routeList: routeList);
+                    },
+                  );
                 },
               )
             : ListView.builder(
