@@ -12,6 +12,7 @@ import 'package:prevent_ride_pass2/model/SavedData.dart';
 import 'package:prevent_ride_pass2/point_list.screen.dart';
 import 'package:prevent_ride_pass2/setting_screen.dart';
 import 'package:prevent_ride_pass2/util/GeneralUtil.dart';
+import 'package:prevent_ride_pass2/widget/LoadingWidget.dart';
 import 'package:sqflite/sqflite.dart';
 
 // https://github.com/SEKI-YUTA/Flutter_PreventRidePass/blob/master/lib/map_screen.dart
@@ -84,6 +85,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
   MapController mapController = MapController();
   // late Database database;
   bool locationEnabled = false;
+  bool networkConnect = false;
+  bool loading = true;
+
   int _counter = 0;
   List<Marker> markerList = List.empty(growable: true);
   Marker? pickedMarker = null;
@@ -138,10 +142,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   void setUp() async {
-    locationEnabled = await checkPermission();
+    // locationEnabled = await checkPermission();
     if (database == null) {
       database = await GeneralUtil.getAppDatabase();
     }
+
+    Future<bool> networkConnectFuture = GeneralUtil.checkNetworkConnect();
+    Future<bool> permissionStateFuture = checkPermission();
+    Future f = Future.wait([networkConnectFuture, permissionStateFuture]);
+    f.then((value) {
+      List<bool> resultList = value as List<bool>;
+      networkConnect = resultList[0];
+      locationEnabled = resultList[1];
+      loading = false;
+    });
   }
 
   Future<void> navigateToPointListScreen(BuildContext context) async {
@@ -235,43 +249,78 @@ class _MapScreenState extends ConsumerState<MapScreen>
       body: Center(
         child: Stack(
           children: <Widget>[
-            FlutterMap(
-              mapController: mapController,
-              options: MapOptions(
-                  center: LatLng(34.70880958006056, 135.64355656940705),
-                  onPositionChanged: (position, hasGesture) {
-                    print("position changed");
-                  },
-                  onTap: (tapPosition, point) {
-                    print("tapped");
-                    setPickedMarker(point);
-                    setState(() {});
-                  },
-                  interactiveFlags: InteractiveFlag.all,
-                  enableScrollWheel: true,
-                  scrollWheelVelocity: 0.00001),
-              children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                ),
-                MarkerLayer(
-                  markers: [
-                    pickedMarker ?? emptyMarker,
-                    activeMarker ?? emptyMarker,
-                    (currentLocation.latitude != 0 &&
-                            currentLocation.longitude != 0)
-                        ? Marker(
-                            point: LatLng(currentLocation.latitude,
-                                currentLocation.longitude),
-                            builder: (context) {
-                              return const Icon(Icons.person_pin_outlined);
+            loading
+                ? LoadingWidget()
+                : networkConnect && locationEnabled
+                    ? FlutterMap(
+                        mapController: mapController,
+                        options: MapOptions(
+                            center:
+                                LatLng(34.70880958006056, 135.64355656940705),
+                            onPositionChanged: (position, hasGesture) {
+                              print("position changed");
                             },
+                            onTap: (tapPosition, point) {
+                              print("tapped");
+                              setPickedMarker(point);
+                              setState(() {});
+                            },
+                            interactiveFlags: InteractiveFlag.all,
+                            enableScrollWheel: true,
+                            scrollWheelVelocity: 0.00001),
+                        children: [
+                          TileLayer(
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          ),
+                          MarkerLayer(
+                            markers: [
+                              pickedMarker ?? emptyMarker,
+                              activeMarker ?? emptyMarker,
+                              (currentLocation.latitude != 0 &&
+                                      currentLocation.longitude != 0)
+                                  ? Marker(
+                                      point: LatLng(currentLocation.latitude,
+                                          currentLocation.longitude),
+                                      builder: (context) {
+                                        return const Icon(
+                                            Icons.person_pin_outlined);
+                                      },
+                                    )
+                                  : emptyMarker
+                            ],
                           )
-                        : emptyMarker
-                  ],
-                )
-              ],
-            )
+                        ],
+                      )
+                    : MessageWidget(
+                        netState: networkConnect,
+                        permissionState: locationEnabled),
+            // 検索バー
+            Align(
+              alignment: AlignmentDirectional.topCenter,
+              child: Container(
+                padding: ConstantValue.cardPadding,
+                child: Container(
+                  decoration: BoxDecoration(color: Colors.white),
+                  child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: MediaQuery.of(context).size.width - 80,
+                          child: TextField(
+                            decoration:
+                                ConstantValue.createPlaceholderDecoration(
+                                    "場所を検索"),
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.search_outlined),
+                          onPressed: () {},
+                        )
+                      ]),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -332,6 +381,29 @@ class _MapScreenState extends ConsumerState<MapScreen>
               child: const Icon(Icons.add),
             )
           : Container(),
+    );
+  }
+}
+
+class MessageWidget extends StatelessWidget {
+  bool netState;
+  bool permissionState;
+  MessageWidget(
+      {super.key, required this.netState, required this.permissionState});
+
+  @override
+  Widget build(BuildContext context) {
+    String msg = "問題が発生しました。";
+    if (!netState) {
+      msg = "ネットワークに接続されていません";
+    } else if (!permissionState) {
+      msg = "パーミッションが許可されていません。";
+    }
+    return Center(
+      child: Text(
+        msg,
+        style: ConstantValue.titleText,
+      ),
     );
   }
 }

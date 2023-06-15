@@ -32,7 +32,11 @@ class _PointListScreenState extends ConsumerState<PointListScreen> {
   void initState() {
     // TODO: implement initState
     super.initState();
-    GeneralUtil.readAllPointFromDB(widget.db);
+  }
+
+  void startUp() async {
+    List<Point> pList = await GeneralUtil.readAllPointFromDB(widget.db);
+    print(pList.length);
   }
 
   @override

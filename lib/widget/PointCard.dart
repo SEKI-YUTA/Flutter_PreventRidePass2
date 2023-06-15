@@ -3,13 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:prevent_ride_pass2/ConstantValue.dart';
 import 'package:prevent_ride_pass2/model/Point.dart';
 
-class PointCard extends StatelessWidget {
-  const PointCard({
+class PointCard extends StatefulWidget {
+  PointCard({
     super.key,
     required this.p,
   });
-
   final Point p;
+
+  @override
+  State<PointCard> createState() => _PointCardState();
+}
+
+class _PointCardState extends State<PointCard> {
+  bool active = false;
 
   @override
   Widget build(BuildContext context) {
@@ -23,20 +29,34 @@ class PointCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  p.name,
+                  widget.p.name,
                   style: ConstantValue.titleText,
                 ),
                 IconButton(
                   icon: const Icon(Icons.map_outlined),
                   onPressed: () {
                     // 地図で場所を表示
-                    Navigator.pop(context, p);
+                    Navigator.pop(context, widget.p);
                   },
                 )
               ],
             ),
-            Text("緯度: " + p.latitude.toString()),
-            Text("経度: " + p.longitude.toString())
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  children: [
+                    Text("緯度: " + widget.p.latitude.toString()),
+                    Text("経度: " + widget.p.longitude.toString())
+                  ],
+                ),
+                Switch(
+                    value: active,
+                    onChanged: (val) => setState(() {
+                          active = val;
+                        }))
+              ],
+            )
           ],
         ),
       ),

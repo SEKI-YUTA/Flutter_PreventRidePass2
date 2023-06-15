@@ -1,3 +1,4 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:path/path.dart';
 import 'package:prevent_ride_pass2/ConstantValue.dart';
 import 'package:prevent_ride_pass2/model/Point.dart';
@@ -19,12 +20,17 @@ class GeneralUtil {
     return insertedId;
   }
 
-  static void readAllPointFromDB(Database db) async {
+  static Future<List<Point>> readAllPointFromDB(Database db) async {
     // static Future<List<Point>> readAllPointFromDB(Database db) async {
     List<Point> pointList = [];
-    List<Map<String, dynamic>> rawQuery =
-        await db.rawQuery("select * from ${ConstantValue.pointTable}");
-    print("data count ${rawQuery.length}");
+    Future<List> list =
+        db.rawQuery("select * from ${ConstantValue.pointTable}");
+    return list.then((value) => List.generate(value.length, (idx) {
+          String name = value[idx]["name"];
+          double latitiude = double.parse(value[idx]["latitude"]);
+          double longitude = double.parse(value[idx]["longitude"]);
+          return Point(name: name, latitude: latitiude, longitude: longitude);
+        }));
   }
 
   static Future<Database> getAppDatabase() async {
@@ -37,5 +43,16 @@ class GeneralUtil {
     });
 
     return database;
+  }
+
+  static Future<bool> checkNetworkConnect() {
+    final connectState = Connectivity().checkConnectivity();
+    return connectState.then((value) {
+      if (value == ConnectivityResult.none) {
+        return false;
+      } else {
+        return true;
+      }
+    });
   }
 }
