@@ -12,6 +12,7 @@ import 'package:prevent_ride_pass2/ConstantValue.dart';
 import 'package:prevent_ride_pass2/model/Point.dart';
 import 'package:prevent_ride_pass2/model/Route.dart';
 import 'package:prevent_ride_pass2/model/SavedData.dart';
+import 'package:prevent_ride_pass2/model/Setting.dart';
 import 'package:prevent_ride_pass2/point_list.screen.dart';
 import 'package:prevent_ride_pass2/setting_screen.dart';
 import 'package:prevent_ride_pass2/util/GeneralUtil.dart';
@@ -115,7 +116,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   List<Marker> markerList = List.empty(growable: true);
   Marker? pickedMarker = null;
   Marker? activeMarker = null;
-
+  List<Marker> acitvePointMarkerList = [];
   Marker emptyMarker =
       Marker(point: LatLng(0, 0), builder: (context) => Container());
 
@@ -240,17 +241,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
   @override
   void initState() {
     super.initState();
-    mapController = MapController();
     WidgetsBinding.instance.addObserver(this);
+    mapController = MapController();
     setUp();
   }
 
   @override
   void dispose() {
-    // TODO: implement dispose
-    super.dispose();
     WidgetsBinding.instance.removeObserver(this);
     mapController?.dispose();
+    super.dispose();
   }
 
   @override
@@ -271,16 +271,47 @@ class _MapScreenState extends ConsumerState<MapScreen>
           mapController!.zoom);
     }
 
-    List<Marker> acitvePointMarkerList = savedData.pointList
-        .where((element) => element.isActive)
-        .map((point) => Marker(
-              point: LatLng(point.latitude, point.longitude),
-              builder: (context) => const Icon(
-                Icons.location_on_outlined,
-                color: Colors.red,
-              ),
-            ))
-        .toList();
+    acitvePointMarkerList =
+        savedData.pointList.where((element) => element.isActive).map((point) {
+      return Marker(
+        point: LatLng(point.latitude, point.longitude),
+        builder: (context) => RotationTransition(
+          turns: AlwaysStoppedAnimation(-1 * (mapController!.rotation / 360)),
+          child: Icon(
+            Icons.location_on_outlined,
+            color: Colors.red,
+          ),
+        ),
+      );
+    }).toList();
+
+    WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
+      print("postFrameCallback");
+      List<Point> activeList =
+          savedData.pointList.where((element) => element.isActive).toList();
+      print("activeList size: ${activeList.length}");
+      activeList.forEach((point) {
+        double distance = Geolocator.distanceBetween(
+            point.latitude,
+            point.longitude,
+            currentLocation.latitude,
+            currentLocation.longitude);
+        print("distance: $distance");
+        if (distance <= Setting.th_meter && !point.isRinged) {
+          print("通知を出す処理");
+          // どうやらbuild時にステートを更新するとbuildが永遠に続いてエラーがでるみたい
+          point.isRinged = true;
+          int idx = savedData.pointList.indexOf(point);
+          List<Point> newPointList = savedData.pointList;
+          if (idx != -1) {
+            newPointList[idx] = point;
+            savedDataController.state = SavedData(
+                pointList: newPointList, routeList: savedData.routeList);
+          }
+        }
+      });
+    });
+
     // if (mapController.state.mounted) {
     //   mapController.move(
     //       LatLng(currentLocation.latitude, currentLocation.longitude),
