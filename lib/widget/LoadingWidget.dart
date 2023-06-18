@@ -8,7 +8,14 @@ class LoadingWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: CircularProgressIndicator(),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: const [
+          CircularProgressIndicator(),
+          SizedBox(height: 8),
+          Text("読み込み中です...")
+        ],
+      ),
     );
   }
 }

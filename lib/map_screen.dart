@@ -104,6 +104,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   // late Database database;
   MapController? mapController;
   bool locationEnabled = false;
+  bool hasNotificationPermission = false;
   bool networkConnect = false;
   bool loading = true;
   bool isSearching = false;
@@ -135,53 +136,25 @@ class _MapScreenState extends ConsumerState<MapScreen>
             ));
   }
 
-  Future<bool> checkPermission() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      // Location services are not enabled don't continue
-      // accessing the position and request users of the
-      // App to enable the location services.
-      return Future.error('Location services are disabled.');
-    }
-
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        // Permissions are denied, next time you could try
-        // requesting permissions again (this is also where
-        // Android's shouldShowRequestPermissionRationale
-        // returned true. According to Android guidelines
-        // your App should show an explanatory UI now.
-        return Future.error('Location permissions are denied');
-      }
-    }
-
-    if (permission == LocationPermission.deniedForever) {
-      // Permissions are denied forever, handle appropriately.
-      return Future.error(
-          'Location permissions are permanently denied, we cannot request permissions.');
-    }
-    bool result = (permission == LocationPermission.whileInUse ||
-            permission == LocationPermission.always)
-        ? true
-        : false;
-    return result;
-  }
-
   void setUp() async {
     // locationEnabled = await checkPermission();
     database ??= await GeneralUtil.getAppDatabase();
 
     Future<bool> networkConnectFuture = GeneralUtil.checkNetworkConnect();
-    Future<bool> permissionStateFuture = checkPermission();
-    Future f = Future.wait([networkConnectFuture, permissionStateFuture]);
+    Future<bool> permissionStateFuture = GeneralUtil.checkLocationPermission();
+    Future<bool> notificationPermissionState =
+        GeneralUtil.checkNotificationPermission();
+    Future f = Future.wait([
+      networkConnectFuture,
+      permissionStateFuture,
+      notificationPermissionState
+    ]);
     f.then((value) {
       List<bool> resultList = value as List<bool>;
       networkConnect = resultList[0];
       locationEnabled = resultList[1];
+      hasNotificationPermission = resultList[2];
+      print("hasNotificationPermission $hasNotificationPermission");
       loading = false;
       setState(() {});
     });
@@ -299,6 +272,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
         print("distance: $distance");
         if (distance <= Setting.th_meter && !point.isRinged) {
           print("通知を出す処理");
+          GeneralUtil.notify(
+              title: "${point.name}に近づきました",
+              body: "目的地に近づきました",
+              id: point.latitude.toInt());
           // どうやらbuild時にステートを更新するとbuildが永遠に続いてエラーがでるみたい
           point.isRinged = true;
           int idx = savedData.pointList.indexOf(point);
@@ -360,12 +337,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
         body: Center(
           child: Stack(
             children: <Widget>[
-              loading
-                  ? LoadingWidget()
+              loading ||
+                      currentLocation.latitude == 0 &&
+                          currentLocation.longitude == 0
+                  ? const LoadingWidget()
                   : networkConnect && locationEnabled
                       ? FlutterMap(
                           mapController: mapController,
                           options: MapOptions(
+                              zoom: 15,
                               onMapReady: () {
                                 print("on Map ready");
                                 isMapReady = true;
@@ -382,7 +362,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                   setState(() {});
                                 }
                               },
-                              center: ConstantValue.defaultLocation,
+                              center: LatLng(currentLocation.latitude,
+                                  currentLocation.longitude),
                               onPositionChanged: (position, hasGesture) {
                                 print("position changed");
                               },

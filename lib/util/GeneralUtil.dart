@@ -1,4 +1,6 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:path/path.dart';
 import 'package:prevent_ride_pass2/ConstantValue.dart';
 import 'package:prevent_ride_pass2/model/Point.dart';
@@ -56,5 +58,80 @@ class GeneralUtil {
         return true;
       }
     });
+  }
+
+  static Future<bool> checkLocationPermission() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      // Location services are not enabled don't continue
+      // accessing the position and request users of the
+      // App to enable the location services.
+      return Future.error('Location services are disabled.');
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        // Permissions are denied, next time you could try
+        // requesting permissions again (this is also where
+        // Android's shouldShowRequestPermissionRationale
+        // returned true. According to Android guidelines
+        // your App should show an explanatory UI now.
+        return Future.error('Location permissions are denied');
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      // Permissions are denied forever, handle appropriately.
+      return Future.error(
+          'Location permissions are permanently denied, we cannot request permissions.');
+    }
+    bool result = (permission == LocationPermission.whileInUse ||
+            permission == LocationPermission.always)
+        ? true
+        : false;
+    return result;
+  }
+
+  static Future<bool> checkNotificationPermission() async {
+    bool? result = false;
+    FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+        FlutterLocalNotificationsPlugin();
+    result = await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestPermission();
+
+    return Future.value(result);
+  }
+
+  static Future<void> notify(
+      {required String title,
+      required String body,
+      required int id,
+      bool playSound = true,
+      bool vib = true}) {
+    final flnp = FlutterLocalNotificationsPlugin();
+    return flnp
+        .initialize(
+          InitializationSettings(
+            android: AndroidInitializationSettings('location_target'),
+          ),
+        )
+        .then((_) => flnp.show(
+            id,
+            title,
+            body,
+            NotificationDetails(
+              android: AndroidNotificationDetails(
+                'channel_id',
+                'channel_name',
+                playSound: playSound,
+                enableVibration: vib,
+              ),
+            )));
   }
 }
