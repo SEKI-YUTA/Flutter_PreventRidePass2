@@ -3,9 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/framework.dart';
 import 'package:flutter/src/widgets/placeholder.dart';
 
-class SettingScreen extends StatelessWidget {
+class SettingScreen extends StatefulWidget {
   const SettingScreen({super.key});
 
+  @override
+  State<SettingScreen> createState() => _SettingScreenState();
+}
+
+class _SettingScreenState extends State<SettingScreen> {
+  int notifyDistance = 500;
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -13,10 +19,12 @@ class SettingScreen extends StatelessWidget {
       body: Column(mainAxisAlignment: MainAxisAlignment.start, children: [
         DropDownSettingItem(
             label: "通知する距離",
-            defaultVal: 500,
+            defaultVal: notifyDistance,
             itemMap: const {"500m": 500, "800m": 800, "1000m": 1000},
             onValueChange: (int val) {
               print("onValchange" + val.toString());
+              notifyDistance = val;
+              setState(() {});
             })
       ]),
     );
