@@ -17,11 +17,12 @@ class PointListScreen extends ConsumerStatefulWidget {
       {super.key,
       required this.type,
       required this.db,
+      required this.pointList,
       required this.savedDataProvider});
   int type; // 1: 位置リスト 2: ルートリスト
   Database db;
   StateProvider<SavedData> savedDataProvider;
-  List<Point> pointList = DemoData.pointList;
+  List<Point> pointList;
   List<RoutePass> routeList = DemoData.routeList;
   @override
   _PointListScreenState createState() => _PointListScreenState();
@@ -30,33 +31,34 @@ class PointListScreen extends ConsumerStatefulWidget {
 class _PointListScreenState extends ConsumerState<PointListScreen> {
   @override
   void initState() {
-    // TODO: implement initState
     super.initState();
+    print("passed list size: ${widget.pointList.length}");
   }
 
-  void startUp() async {
-    List<Point> pList = await GeneralUtil.readAllPointFromDB(widget.db);
-    print(pList.length);
-  }
+  // void startUp() async {
+  //   List<Point> pList = await GeneralUtil.readAllPointFromDB(widget.db);
+  //   print(pList.length);
+  // }
 
   @override
   Widget build(BuildContext context) {
-    final SavedData savedData = ref.watch(savedDataProvider);
-    final savedDataController = ref.read(savedDataProvider.notifier);
+    final SavedData savedData = ref.watch(widget.savedDataProvider);
+    final savedDataController = ref.read(widget.savedDataProvider.notifier);
     return Scaffold(
       appBar: AppBar(),
       body: Container(
         child: widget.type == 1
             ? ListView.builder(
-                itemCount: savedData.pointList.length,
+                itemCount: widget.pointList.length,
+                // itemCount: savedData.pointList.length,
                 itemBuilder: (context, index) {
-                  Point p = savedData.pointList[index];
+                  Point p = widget.pointList[index];
                   print("$index ${p.isActive}");
                   return PointCard(
                     p: p,
                     changeActiveState: (bool newState) {
                       List<RoutePass> routeList = savedData.routeList;
-                      List<Point> pointList = savedData.pointList;
+                      List<Point> pointList = widget.pointList;
                       Point newP = pointList[index];
                       newP.isActive = newState;
                       pointList[index] = newP;

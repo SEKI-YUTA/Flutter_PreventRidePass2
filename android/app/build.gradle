@@ -64,6 +64,10 @@ android {
             signingConfig signingConfigs.debug
         }
     }
+
+    configurations.all {
+        resolutionStrategy.force 'com.google.android.gms:play-services-location:20.0.0'
+    }
 }
 
 flutter {
@@ -72,5 +76,6 @@ flutter {
 
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+    // implementation 'com.google.android.gms:play-services-location:19.0.0'
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.1.5'
 }

@@ -1,13 +1,18 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:path/path.dart';
 import 'package:prevent_ride_pass2/ConstantValue.dart';
 import 'package:prevent_ride_pass2/model/Point.dart';
 import 'package:prevent_ride_pass2/ConstantValue.dart';
+import 'package:prevent_ride_pass2/notification_screen.dart';
 import 'package:sqflite/sqflite.dart';
 
 import 'package:sqflite/sqlite_api.dart';
+
+// https://github.com/Baseflow/flutter-geolocator/issues/1212
 
 class GeneralUtil {
   static Future<int> insertPoint(Database database, Point p) async {
@@ -112,6 +117,7 @@ class GeneralUtil {
       {required String title,
       required String body,
       required int id,
+      // required BuildContext context,
       bool playSound = true,
       bool vib = true}) {
     final flnp = FlutterLocalNotificationsPlugin();
@@ -120,6 +126,9 @@ class GeneralUtil {
           InitializationSettings(
             android: AndroidInitializationSettings('location_target'),
           ),
+          // onDidReceiveNotificationResponse: (details) {
+          //   onDidReceiveLocalNotification(id, title, body, "", context);
+          // },
         )
         .then((_) => flnp.show(
             id,
@@ -133,5 +142,34 @@ class GeneralUtil {
                 enableVibration: vib,
               ),
             )));
+  }
+
+  static void onDidReceiveLocalNotification(int id, String title, String body,
+      String payload, BuildContext context) async {
+    // display a dialog with the notification details, tap ok to go to another page
+    showDialog(
+      context: context,
+      builder: (BuildContext context) => CupertinoAlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            child: Text('Ok'),
+            onPressed: () async {
+              Navigator.of(context, rootNavigator: true).pop();
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => NotificationScreen(
+                    payload: payload,
+                  ),
+                ),
+              );
+            },
+          )
+        ],
+      ),
+    );
   }
 }
