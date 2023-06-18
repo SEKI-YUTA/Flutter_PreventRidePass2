@@ -100,7 +100,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     } else {
       var request = await ph.Permission.location.request();
       print(request);
-      if (request == ph.PermissionStatus.denied || request == ph.PermissionStatus.permanentlyDenied) {
+      if (request == ph.PermissionStatus.denied ||
+          request == ph.PermissionStatus.permanentlyDenied) {
         print("show exit dialog");
         showDialog(
           context: context,
@@ -598,6 +599,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                   borderRadius: BorderRadius.circular(10)),
                               child: GestureDetector(
                                 onTap: () {
+                                  isTracking = false;
+                                  setState(() {});
                                   mapController!.move(
                                       LatLng(lat, lon), mapController!.zoom);
                                 },
