@@ -16,7 +16,6 @@ class SettingScreen extends StatefulWidget {
 }
 
 class _SettingScreenState extends State<SettingScreen> {
-  int notifyDistance = 500;
   SharedPreferences? preferences;
 
   @override
@@ -31,12 +30,13 @@ class _SettingScreenState extends State<SettingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    print("setting: ${widget.setting.toJson()}");
     return Scaffold(
       appBar: AppBar(),
       body: Column(mainAxisAlignment: MainAxisAlignment.start, children: [
         DropDownSettingItem(
             label: "通知する距離",
-            defaultVal: notifyDistance,
+            defaultVal: widget.setting.thMeter,
             itemMap: const {
               "100m": 100,
               "300m": 300,
@@ -48,11 +48,11 @@ class _SettingScreenState extends State<SettingScreen> {
               if (widget.setting == null) print("setting is null");
               Setting newSetting = widget.setting.copyWith(thMeter: val);
               newSetting = newSetting.copyWith(faliled: false);
+              widget.setting = newSetting;
               print("onValchange" + val.toString());
               preferences!.setString(
                   ConstantValue.settingStrKey, newSetting.toJson().toString());
               widget.cacllback(newSetting);
-              notifyDistance = val;
               setState(() {});
             })
       ]),
