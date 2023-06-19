@@ -573,25 +573,29 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       ]),
                 ),
               ),
-              searchResult != null
-                  ? AnimatedPositioned(
-                      duration: const Duration(seconds: 1),
-                      left: 0,
-                      bottom: (searchResult == null && searchResultShowing)
-                          ? -300
-                          : 20,
-                      curve: Curves.bounceInOut,
-                      child: GestureDetector(
-                        onPanUpdate: (details) {
-                          if (details.delta.dy > 0) {
-                            // 下方向にスワイプした時
-                            print("hide");
-                            searchResult = null;
-                            searchResultShowing = false;
-                            setState(() {});
-                          }
-                        },
-                        child: Container(
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 400),
+                left: 0,
+                bottom:
+                    (searchResult != null && searchResultShowing) ? 20 : -160,
+                curve: Curves.bounceInOut,
+                child: GestureDetector(
+                  onPanUpdate: (details) {
+                    if (details.delta.dy > 0) {
+                      // 下方向にスワイプした時
+                      print("hide");
+                      searchResultShowing = false;
+                      setState(() {});
+                    }
+                    if (details.delta.dy < 0) {
+                      // 上方向にスワイプしたとき
+                      print("show");
+                      searchResultShowing = true;
+                      setState(() {});
+                    }
+                  },
+                  child: searchResult != null
+                      ? Container(
                           height: 200,
                           width: MediaQuery.of(context).size.width,
                           child: ListView.builder(
@@ -665,10 +669,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               );
                             },
                           ),
-                        ),
-                      ),
-                    )
-                  : Container()
+                        )
+                      : Container(),
+                ),
+              )
             ],
           ),
         ),
