@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/framework.dart';
 import 'package:flutter/src/widgets/placeholder.dart';
+import 'package:prevent_ride_pass2/ConstantValue.dart';
+import 'package:prevent_ride_pass2/model/Setting.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingScreen extends StatefulWidget {
-  const SettingScreen({super.key});
+  SettingScreen({super.key, required this.setting, required this.cacllback});
+  Setting setting;
+  Function(Setting s) cacllback;
 
   @override
   State<SettingScreen> createState() => _SettingScreenState();
@@ -12,6 +17,18 @@ class SettingScreen extends StatefulWidget {
 
 class _SettingScreenState extends State<SettingScreen> {
   int notifyDistance = 500;
+  SharedPreferences? preferences;
+
+  @override
+  void initState() {
+    super.initState();
+    setUp();
+  }
+
+  void setUp() async {
+    preferences = await SharedPreferences.getInstance();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -20,9 +37,21 @@ class _SettingScreenState extends State<SettingScreen> {
         DropDownSettingItem(
             label: "通知する距離",
             defaultVal: notifyDistance,
-            itemMap: const {"500m": 500, "800m": 800, "1000m": 1000},
+            itemMap: const {
+              "100m": 100,
+              "300m": 300,
+              "500m": 500,
+              "800m": 800,
+              "1000m": 1000
+            },
             onValueChange: (int val) {
+              if (widget.setting == null) print("setting is null");
+              Setting newSetting = widget.setting.copyWith(thMeter: val);
+              newSetting = newSetting.copyWith(faliled: false);
               print("onValchange" + val.toString());
+              preferences!.setString(
+                  ConstantValue.settingStrKey, newSetting.toJson().toString());
+              widget.cacllback(newSetting);
               notifyDistance = val;
               setState(() {});
             })

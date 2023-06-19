@@ -61,6 +61,7 @@ class _PointListScreenState extends ConsumerState<PointListScreen> {
                       List<Point> pointList = widget.pointList;
                       Point newP = pointList[index];
                       newP.isActive = newState;
+                      newP.isRinged = false;
                       pointList[index] = newP;
                       savedDataController.state =
                           SavedData(pointList: pointList, routeList: routeList);

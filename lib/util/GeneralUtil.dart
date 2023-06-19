@@ -6,11 +6,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:path/path.dart';
 import 'package:prevent_ride_pass2/ConstantValue.dart';
 import 'package:prevent_ride_pass2/model/Point.dart';
-import 'package:prevent_ride_pass2/ConstantValue.dart';
 import 'package:prevent_ride_pass2/notification_screen.dart';
+import 'package:prevent_ride_pass2/util/RequirePemisson.dart';
 import 'package:sqflite/sqflite.dart';
-
-import 'package:sqflite/sqlite_api.dart';
 
 // https://github.com/Baseflow/flutter-geolocator/issues/1212
 
@@ -173,7 +171,10 @@ class GeneralUtil {
     );
   }
 
-  static void showExitDialog(BuildContext context, VoidCallback exitCallback) {
+  static void showExitDialog(BuildContext context, RequirePermission permission,
+      VoidCallback exitCallback) {
+    String permissionStr =
+        permission == RequirePermission.location ? "現在位置へのアクセス権限" : "通知の権限";
     showDialog(
       context: context,
       builder: (context) {
@@ -182,7 +183,7 @@ class GeneralUtil {
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
-              children: const [Text("現在位置へのアクセスを許可してください")]),
+              children: [Text("$permissionStrを許可してください")]),
           actions: [
             TextButton(
                 onPressed: () {

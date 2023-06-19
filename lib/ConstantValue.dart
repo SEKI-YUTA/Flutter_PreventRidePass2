@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:prevent_ride_pass2/model/Setting.dart';
 
 class ConstantValue {
   static String dbName = "prevetRidePass.db";
   static String pointTable = "pointTable";
   static String routeTable = "routeTable";
+  static String settingStrKey = "settingStrKey";
   static String GASbaseURL =
       "https://script.google.com/macros/s/AKfycbzd3QKrbBm7SsJYsUJ3oVdnznnmBGdOcqaAqztLNqf9euL41HibiXsBkqF5ENawf322jQ/exec";
   static LatLng defaultLocation = LatLng(35.68954055933207, 139.69169865644184);
@@ -17,4 +19,6 @@ class ConstantValue {
   static InputDecoration createPlaceholderDecoration(String placeholder) {
     return InputDecoration(hintText: placeholder);
   }
+
+  static Setting defaultSetting = Setting(thMeter: 500, faliled: true);
 }

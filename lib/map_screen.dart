@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi';
 import 'dart:io';
 
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +19,7 @@ import 'package:prevent_ride_pass2/model/Setting.dart';
 import 'package:prevent_ride_pass2/point_list.screen.dart';
 import 'package:prevent_ride_pass2/setting_screen.dart';
 import 'package:prevent_ride_pass2/util/GeneralUtil.dart';
+import 'package:prevent_ride_pass2/util/RequirePemisson.dart';
 import 'package:prevent_ride_pass2/widget/LoadingWidget.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:http/http.dart' as http;
@@ -45,35 +46,42 @@ class _MapScreenState extends ConsumerState<MapScreen>
     with WidgetsBindingObserver {
   // late Database database;
   MapController? mapController;
+  // 権限関連
   bool locationEnabled = false;
   bool hasNotificationPermission = false;
+  // ネットに接続されているか
   bool networkConnect = false;
+  // 現在位置を取得中であるか
   bool loading = true;
+  // 検索中であるか
   bool isSearching = false;
+  // マップの用意ができているか
   bool isMapReady = false;
+  // 現在位置の移動を追従するか
   bool isTracking = true;
-  List<dynamic>? searchResult = null;
+  // 検索結果をスワイプで表示非表示を管理
+  bool searchResultShowing = true;
+
+  Setting setting = ConstantValue.defaultSetting;
+  SharedPreferences? preferences;
+  List<dynamic>? searchResult;
   TextEditingController searchInputController = TextEditingController();
-
-  final currentLocationProvider = StateProvider<CurrentLocation>((ref) {
-    return CurrentLocation(latitude: 0, longitude: 0);
-  });
-
-  final savedDataProvider = StateProvider<SavedData>((ref) {
-    return SavedData(pointList: [], routeList: []);
-  });
-
-  AutoDisposeStreamProvider<LocationData>? currentLocationStateProvider = null;
-  AutoDisposeFutureProvider<SavedData>? savedDataStateProvider = null;
-
-  int _counter = 0;
   List<Marker> markerList = List.empty(growable: true);
-  Marker? pickedMarker = null;
-  Marker? activeMarker = null;
-  Marker? searchResultMarker = null;
+  Marker? pickedMarker;
+  Marker? activeMarker;
+  Marker? searchResultMarker;
   List<Marker> acitvePointMarkerList = [];
   Marker emptyMarker =
       Marker(point: LatLng(0, 0), builder: (context) => Container());
+
+  AutoDisposeStreamProvider<LocationData>? currentLocationStateProvider;
+  AutoDisposeFutureProvider<SavedData>? savedDataStateProvider;
+  final currentLocationProvider = StateProvider<CurrentLocation>((ref) {
+    return CurrentLocation(latitude: 0, longitude: 0);
+  });
+  final savedDataProvider = StateProvider<SavedData>((ref) {
+    return SavedData(pointList: [], routeList: []);
+  });
 
   setPickedMarker(LatLng pos) {
     pickedMarker = Marker(
@@ -82,7 +90,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               child: RotationTransition(
                   turns: AlwaysStoppedAnimation(
                       -1 * (mapController!.rotation / 360)),
-                  child: Icon(Icons.location_on_outlined)),
+                  child: const Icon(Icons.location_on_outlined)),
               onLongPress: () {
                 pickedMarker = null;
                 setState(() {});
@@ -90,8 +98,48 @@ class _MapScreenState extends ConsumerState<MapScreen>
             ));
   }
 
+  setActiveMarker(Point p) {
+    activeMarker = Marker(
+        point: LatLng(p.latitude, p.longitude),
+        builder: (context) => RotationTransition(
+              turns:
+                  AlwaysStoppedAnimation(-1 * (mapController!.rotation / 360)),
+              child: GestureDetector(
+                child: const Icon(
+                  Icons.location_pin,
+                  color: Colors.blue,
+                ),
+              ),
+            ));
+  }
+
+  setSearchResultMarker(Point p) {
+    searchResultMarker = Marker(
+        point: LatLng(p.latitude, p.longitude),
+        builder: (context) => RotationTransition(
+              turns:
+                  AlwaysStoppedAnimation(-1 * (mapController!.rotation / 360)),
+              child: GestureDetector(
+                child: const Icon(
+                  Icons.location_pin,
+                  color: Colors.deepOrange,
+                ),
+              ),
+            ));
+  }
+
   void setUp() async {
     // locationEnabled = await checkPermission();
+    preferences = await SharedPreferences.getInstance();
+    String? settingStr = preferences!.getString(ConstantValue.settingStrKey);
+    print("settingStr: $settingStr");
+    if (settingStr != null) {
+      Map<String, dynamic> map = json.decode(settingStr);
+      int thMeter = map["thMeter"];
+      bool failed = map["failed"];
+      setting = Setting(thMeter: thMeter, faliled: failed);
+      // setting = Setting.fromJson(json.decode(settingStr));
+    }
     database ??= await GeneralUtil.getAppDatabase();
 
     Future<bool> networkConnectFuture = GeneralUtil.checkNetworkConnect();
@@ -99,44 +147,43 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (!(locationState == ph.PermissionStatus.denied)) {
       locationEnabled = true;
       print("has location permission");
-      injectProvider();
+      // injectProvider();
     } else {
       var request = await ph.Permission.location.request();
       print(request);
       if (request == ph.PermissionStatus.denied ||
           request == ph.PermissionStatus.permanentlyDenied) {
         // ignore: use_build_context_synchronously
-        GeneralUtil.showExitDialog(context, () {
+        GeneralUtil.showExitDialog(context, RequirePermission.location, () {
           exit(1);
         });
       } else {
         print("arrowed locaiton permission");
         locationEnabled = true;
-        injectProvider();
+        // injectProvider();
       }
     }
     var notificationState = await ph.Permission.notification.status;
-    print("notificatio state ${notificationState}");
-    // Map<ph.Permission, ph.PermissionStatus> statuses =
-    //     await [ph.Permission.location, ph.Permission.notification].request();
-    // // iOSの場合はこのif文では不十分
-    // for (ph.Permission p in statuses.keys) {
-    //   print("permission $p");
-    // }
-    // for (ph.PermissionStatus state in statuses.values) {
-    //   print("state: ${state}");
-    // }
-    // if (statuses[ph.Permission.location] == PermissionStatus.granted) {
-    //   print("X");
-    //   locationEnabled = true;
-    // }
-    // if (statuses[ph.Permission.notification] == PermissionStatus.granted) {
-    //   hasNotificationPermission = true;
-    //   print("Y");
-    // }
-    // Future<bool> permissionStateFuture = GeneralUtil.checkLocationPermission();
-    // Future<bool> notificationPermissionState =
-    //     GeneralUtil.checkNotificationPermission();
+    if (!(notificationState == ph.PermissionStatus.denied)) {
+      hasNotificationPermission = true;
+      print("has notification permission");
+      // injectProvider();
+    } else {
+      var request = await ph.Permission.notification.request();
+      print(request);
+      if (request == ph.PermissionStatus.denied ||
+          request == ph.PermissionStatus.permanentlyDenied) {
+        // ignore: use_build_context_synchronously
+        GeneralUtil.showExitDialog(context, RequirePermission.notification, () {
+          exit(1);
+        });
+      } else {
+        print("arrowed notification permission");
+        hasNotificationPermission = true;
+        // injectProvider();
+      }
+    }
+    if (hasNotificationPermission && locationEnabled) injectProvider();
     Future f = Future.wait([
       networkConnectFuture,
       // permissionStateFuture,
@@ -167,18 +214,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         lng.longitude == p.longitude) {
       pickedMarker = null;
     }
-    activeMarker = Marker(
-        point: LatLng(p.latitude, p.longitude),
-        builder: (context) => RotationTransition(
-              turns:
-                  AlwaysStoppedAnimation(-1 * (mapController!.rotation / 360)),
-              child: GestureDetector(
-                child: const Icon(
-                  Icons.location_pin,
-                  color: Colors.blue,
-                ),
-              ),
-            ));
+    setActiveMarker(p);
     mapController!.move(LatLng(p.latitude, p.longitude), mapController!.zoom);
     setState(() {});
   }
@@ -201,6 +237,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
         Fluttertoast.showToast(msg: "該当する場所が見つかりませんでした");
       }
       isSearching = false;
+      searchResultShowing = true;
       setState(() {});
     });
   }
@@ -223,13 +260,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
       location.enableBackgroundMode(enable: true);
 
       return location.onLocationChanged.map((LocationData locationData) {
-        if (locationData != null) {
-          print(
-              "locationData latitude: ${locationData.latitude} longitude: ${locationData.longitude}");
-          ref.read(currentLocationProvider.notifier).state = CurrentLocation(
-              latitude: locationData.latitude!,
-              longitude: locationData.longitude!);
-        }
+        print(
+            "locationData latitude: ${locationData.latitude} longitude: ${locationData.longitude}");
+        ref.read(currentLocationProvider.notifier).state = CurrentLocation(
+            latitude: locationData.latitude!,
+            longitude: locationData.longitude!);
         SavedData savedData = ref.read(savedDataProvider.notifier).state;
         List<Point> activeList = ref
             .read(savedDataProvider.notifier)
@@ -246,7 +281,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
               currentLocation.latitude,
               currentLocation.longitude);
           print("distance: $distance ringed: ${point.isRinged}");
-          if (distance <= Setting.th_meter && !point.isRinged) {
+          if (distance <= setting.thMeter && !point.isRinged) {
+            // if (distance <= Setting.th_meter && !point.isRinged) {
             print("通知を出す処理");
             GeneralUtil.notify(
               title: "${point.name}に近づきました",
@@ -254,6 +290,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               id: point.latitude.toInt(),
             );
             point.isRinged = true;
+            point.isActive = false;
             int idx = savedData.pointList.indexOf(point);
             List<Point> newPointList = savedData.pointList;
             if (idx != -1) {
@@ -289,10 +326,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
     });
   }
 
+  void saveSetting() async {
+    preferences = await SharedPreferences.getInstance();
+    print("save: ${setting.toJson()}");
+    preferences!
+        .setString(ConstantValue.settingStrKey, setting.toJson().toString());
+    // preferences.setString(ConstantValue.settingStrKey, setting.toString());
+  }
+
   @override
   void initState() {
-    super.initState();
     WidgetsBinding.instance.addObserver(this);
+    super.initState();
     mapController = MapController();
     setUp();
   }
@@ -302,6 +347,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
     WidgetsBinding.instance.removeObserver(this);
     mapController?.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    print("state $state");
+    switch (state) {
+      case AppLifecycleState.resumed:
+        print("resume");
+        break;
+      case AppLifecycleState.paused:
+        saveSetting();
+        print("paused");
+        break;
+    }
   }
 
   @override
@@ -331,13 +391,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
           mapController!.zoom);
     }
 
-    acitvePointMarkerList =
-        savedData.pointList.where((element) => element.isActive).map((point) {
+    acitvePointMarkerList = savedData.pointList
+        .where((element) => element.isActive || element.isRinged)
+        .map((point) {
       return Marker(
         point: LatLng(point.latitude, point.longitude),
         builder: (context) => RotationTransition(
           turns: AlwaysStoppedAnimation(-1 * (mapController!.rotation / 360)),
-          child: Icon(
+          child: const Icon(
             Icons.location_on_outlined,
             color: Colors.red,
           ),
@@ -356,7 +417,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
             onPressed: () {
               // 設定画面へ遷移
               Navigator.of(context).push(MaterialPageRoute(
-                builder: (context) => SettingScreen(),
+                builder: (context) => SettingScreen(
+                  setting: setting,
+                  cacllback: (s) {
+                    // UIを更新しやんからsetStateいらん
+                    setting = s;
+                  },
+                ),
               ));
             },
           ),
@@ -390,7 +457,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       currentLocation.latitude == 0 &&
                           currentLocation.longitude == 0
                   ? const LoadingWidget()
-                  : networkConnect && locationEnabled
+                  : networkConnect
                       ? FlutterMap(
                           mapController: mapController,
                           options: MapOptions(
@@ -458,9 +525,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             )
                           ],
                         )
-                      : MessageWidget(
-                          netState: networkConnect,
-                          permissionState: locationEnabled),
+                      : Center(
+                          child: Text(
+                            "ネットワークに接続されていません",
+                            style: ConstantValue.titleText,
+                          ),
+                        ),
               // 検索バー
               Align(
                 alignment: AlignmentDirectional.topCenter,
@@ -498,7 +568,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                     searchPlace(searchInputController.text);
                                   },
                                 )
-                              : SearchingWidget(),
+                              : Center(child: CircularProgressIndicator()),
                         )
                       ]),
                 ),
@@ -506,86 +576,95 @@ class _MapScreenState extends ConsumerState<MapScreen>
               searchResult != null
                   ? AnimatedPositioned(
                       duration: const Duration(seconds: 1),
-                      bottom: searchResult == null ? -300 : 20,
-                      child: Container(
-                        height: 200,
-                        width: MediaQuery.of(context).size.width,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: searchResult!.length,
-                          itemBuilder: (context, index) {
-                            Map<String, dynamic> itemData =
-                                searchResult![index];
-                            // print(
-                            //     );
-                            String building_name =
-                                itemData['address_components'][0]['short_name'];
-                            String address = itemData['formatted_address'];
-                            // print(itemData['geometry']['location']['lat']);
+                      left: 0,
+                      bottom: (searchResult == null && searchResultShowing)
+                          ? -300
+                          : 20,
+                      curve: Curves.bounceInOut,
+                      child: GestureDetector(
+                        onPanUpdate: (details) {
+                          if (details.delta.dy > 0) {
+                            // 下方向にスワイプした時
+                            print("hide");
+                            searchResult = null;
+                            searchResultShowing = false;
+                            setState(() {});
+                          }
+                        },
+                        child: Container(
+                          height: 200,
+                          width: MediaQuery.of(context).size.width,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: searchResult!.length,
+                            itemBuilder: (context, index) {
+                              Map<String, dynamic> itemData =
+                                  searchResult![index];
+                              // print(
+                              //     );
+                              String buildingName =
+                                  itemData['address_components'][0]
+                                      ['short_name'];
+                              String address = itemData['formatted_address'];
+                              // print(itemData['geometry']['location']['lat']);
 
-                            double lat = itemData['geometry']['location']['lat']
-                                as double;
-                            double lon = itemData['geometry']['location']['lng']
-                                as double;
+                              double lat = itemData['geometry']['location']
+                                  ['lat'] as double;
+                              double lon = itemData['geometry']['location']
+                                  ['lng'] as double;
 
-                            return VisibilityDetector(
-                              key: Key("searchResult:${index.toString()}"),
-                              onVisibilityChanged: (visilityInfo) {
-                                if (visilityInfo.visibleFraction == 1) {
-                                  isTracking = false;
-                                  searchResultMarker = Marker(
-                                      point: LatLng(lat, lon),
-                                      builder: (context) => RotationTransition(
-                                            turns: AlwaysStoppedAnimation(-1 *
-                                                (mapController!.rotation /
-                                                    360)),
-                                            child: GestureDetector(
-                                              child: const Icon(
-                                                Icons.location_pin,
-                                                color: Colors.deepOrange,
-                                              ),
-                                            ),
-                                          ));
-                                  mapController!.move(
-                                      LatLng(lat, lon), mapController!.zoom);
-                                  setState(() {});
-                                }
-                              },
-                              child: Card(
-                                margin: EdgeInsets.fromLTRB(
-                                    index == 0 ? 24 : 16,
-                                    0,
-                                    index == searchResult!.length - 1 ? 24 : 0,
-                                    0),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10)),
-                                child: GestureDetector(
-                                  onTap: () {
+                              return VisibilityDetector(
+                                key: Key("searchResult:${index.toString()}"),
+                                onVisibilityChanged: (visilityInfo) {
+                                  if (visilityInfo.visibleFraction == 1) {
                                     isTracking = false;
-                                    setState(() {});
+                                    setSearchResultMarker(Point(
+                                        name: "",
+                                        latitude: lat,
+                                        longitude: lon));
                                     mapController!.move(
                                         LatLng(lat, lon), mapController!.zoom);
-                                  },
-                                  child: Container(
-                                    padding: ConstantValue.cardPadding,
-                                    width:
-                                        MediaQuery.of(context).size.width * 0.8,
-                                    height: 200,
-                                    child: Column(children: [
-                                      Text(
-                                        building_name,
-                                        style: ConstantValue.titleText,
-                                      ),
-                                      Text(
-                                        address,
-                                        style: const TextStyle(fontSize: 14),
-                                      )
-                                    ]),
+                                    setState(() {});
+                                  }
+                                },
+                                child: Card(
+                                  margin: EdgeInsets.fromLTRB(
+                                      index == 0 ? 24 : 16,
+                                      0,
+                                      index == searchResult!.length - 1
+                                          ? 24
+                                          : 0,
+                                      0),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10)),
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      isTracking = false;
+                                      setState(() {});
+                                      mapController!.move(LatLng(lat, lon),
+                                          mapController!.zoom);
+                                    },
+                                    child: Container(
+                                      padding: ConstantValue.cardPadding,
+                                      width: MediaQuery.of(context).size.width *
+                                          0.8,
+                                      height: 200,
+                                      child: Column(children: [
+                                        Text(
+                                          buildingName,
+                                          style: ConstantValue.titleText,
+                                        ),
+                                        Text(
+                                          address,
+                                          style: const TextStyle(fontSize: 14),
+                                        )
+                                      ]),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            );
-                          },
+                              );
+                            },
+                          ),
                         ),
                       ),
                     )
@@ -676,33 +755,5 @@ class _MapScreenState extends ConsumerState<MapScreen>
             ),
           ],
         ));
-  }
-
-  Widget SearchingWidget() {
-    return Center(child: CircularProgressIndicator());
-  }
-}
-
-class MessageWidget extends StatelessWidget {
-  bool netState;
-  bool permissionState;
-  MessageWidget(
-      {super.key, required this.netState, required this.permissionState});
-  @override
-  Widget build(BuildContext context) {
-    print("netState: $netState");
-    print("locationState: $permissionState");
-    String msg = "問題が発生しました。";
-    if (!netState) {
-      msg = "ネットワークに接続されていません";
-    } else if (!permissionState) {
-      msg = "パーミッションが許可されていません。";
-    }
-    return Center(
-      child: Text(
-        msg,
-        style: ConstantValue.titleText,
-      ),
-    );
   }
 }
