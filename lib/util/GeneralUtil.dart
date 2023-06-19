@@ -172,4 +172,26 @@ class GeneralUtil {
       ),
     );
   }
+
+  static void showExitDialog(BuildContext context, VoidCallback exitCallback) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          content: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: const [Text("現在位置へのアクセスを許可してください")]),
+          actions: [
+            TextButton(
+                onPressed: () {
+                  exitCallback();
+                },
+                child: Text("OK"))
+          ],
+        );
+      },
+    );
+  }
 }

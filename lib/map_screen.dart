@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -21,6 +22,7 @@ import 'package:prevent_ride_pass2/util/GeneralUtil.dart';
 import 'package:prevent_ride_pass2/widget/LoadingWidget.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:http/http.dart' as http;
+import 'package:visibility_detector/visibility_detector.dart';
 
 // https://github.com/SEKI-YUTA/Flutter_PreventRidePass/blob/master/lib/map_screen.dart
 // 最終的にこれで解決↓
@@ -68,6 +70,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   List<Marker> markerList = List.empty(growable: true);
   Marker? pickedMarker = null;
   Marker? activeMarker = null;
+  Marker? searchResultMarker = null;
   List<Marker> acitvePointMarkerList = [];
   Marker emptyMarker =
       Marker(point: LatLng(0, 0), builder: (context) => Container());
@@ -102,26 +105,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
       print(request);
       if (request == ph.PermissionStatus.denied ||
           request == ph.PermissionStatus.permanentlyDenied) {
-        print("show exit dialog");
-        showDialog(
-          context: context,
-          builder: (context) {
-            return AlertDialog(
-              content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: const [Text("現在位置へのアクセスを許可してください")]),
-              actions: [
-                TextButton(
-                    onPressed: () {
-                      exit(1);
-                    },
-                    child: Text("OK"))
-              ],
-            );
-          },
-        );
+        // ignore: use_build_context_synchronously
+        GeneralUtil.showExitDialog(context, () {
+          exit(1);
+        });
       } else {
         print("arrowed locaiton permission");
         locationEnabled = true;
@@ -158,9 +145,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     f.then((value) {
       List<bool> resultList = value as List<bool>;
       networkConnect = resultList[0];
-      // locationEnabled = resultList[1];
-      // hasNotificationPermission = resultList[2];
-      print("f.then");
       loading = false;
       setState(() {});
     });
@@ -177,7 +161,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // 今の段階では値を受け取ていないが将来的に使う事になりそう
     if (result == null) return;
     Point p = result as Point;
-    print("result: ${p.name}");
     LatLng? lng = pickedMarker?.point;
     if (lng != null &&
         lng.latitude == p.latitude &&
@@ -204,7 +187,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (query == "") return Future.value();
     isSearching = true;
     setState(() {});
-    String url = ConstantValue.GASbaseURL + "?query=" + query;
+    String url = "${ConstantValue.GASbaseURL}?query= + $query";
     return http.get(Uri.parse(url)).then((value) {
       Map<String, dynamic> jsonData = json.decode(value.body);
       List<dynamic> tmpList = (jsonData['results']);
@@ -248,7 +231,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
               longitude: locationData.longitude!);
         }
         SavedData savedData = ref.read(savedDataProvider.notifier).state;
-        print("YYY: ${savedData.pointList.length}");
         List<Point> activeList = ref
             .read(savedDataProvider.notifier)
             .state
@@ -257,7 +239,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
             .toList();
         CurrentLocation currentLocation =
             ref.read(currentLocationProvider.notifier).state;
-        activeList.forEach((point) {
+        for (Point point in activeList) {
           double distance = Geolocator.distanceBetween(
               point.latitude,
               point.longitude,
@@ -280,11 +262,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   pointList: newPointList, routeList: savedData.routeList);
             }
           }
-        });
+        }
         return locationData;
       });
     });
-// これらはこの画面でしか使う予定はないので共有する必要はない
 
     savedDataStateProvider = FutureProvider.autoDispose<SavedData>((ref) async {
       database ??= await GeneralUtil.getAppDatabase();
@@ -303,21 +284,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         ref.read(savedDataProvider.notifier).state = data;
       });
 
-      // Future f2 = database!
-      //     .rawQuery("select * from ${ConstantValue.routeTable}")
-      //     .then((value) {
-      //   List<RoutePass> routeList = List.generate(value.length, (index) {
-      //     String name = value[index]["name"] as String;
-      //     List<Point> pointList = value[index]["pointList"] as List<Point>;
-      //     return RoutePass(name: name, pointList: pointList);
-      //   });
-      //   print("routeList size: ${routeList.length}");
-      // });
-
-      // await Future.wait([f1, f2]).then((value) {
-      //   data = SavedData(pointList: value[0], routeList: value[1]);
-      //   ref.read(savedDataProvider.notifier).state = data;
-      // });
       await f1;
       return Future.value(data);
     });
@@ -381,42 +347,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
       print("postFrameCallback");
-      List<Point> activeList =
-          savedData.pointList.where((element) => element.isActive).toList();
-      print("activeList size: ${activeList.length}");
-      activeList.forEach((point) {
-        double distance = Geolocator.distanceBetween(
-            point.latitude,
-            point.longitude,
-            currentLocation.latitude,
-            currentLocation.longitude);
-        print("distance: $distance");
-        if (distance <= Setting.th_meter && !point.isRinged) {
-          print("通知を出す処理");
-          GeneralUtil.notify(
-            title: "${point.name}に近づきました",
-            body: "目的地に近づきました",
-            id: point.latitude.toInt(),
-          );
-          // どうやらbuild時にステートを更新するとbuildが永遠に続いてエラーがでるみたい
-          point.isRinged = true;
-          int idx = savedData.pointList.indexOf(point);
-          List<Point> newPointList = savedData.pointList;
-          if (idx != -1) {
-            newPointList[idx] = point;
-            savedDataController.state = SavedData(
-                pointList: newPointList, routeList: savedData.routeList);
-          }
-        }
-      });
     });
 
-    // if (mapController.state.mounted) {
-    //   mapController.move(
-    //       LatLng(currentLocation.latitude, currentLocation.longitude),
-    //       mapController.zoom);
-    // }
-    // Marker(point: LatLng(1, 1), builder: (context) => Container());
     return Scaffold(
         appBar: AppBar(
           leading: IconButton(
@@ -434,12 +366,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
               onPressed: () {
                 // 登録地点一覧画面へ
                 navigateToPointListScreen(context);
-                // Navigator.of(context).push(MaterialPageRoute(
-                //     builder: (context) => PointListScreen(
-                //           type: 1,
-                //           db: database!,
-                //           savedDataProvider: savedDataProvider,
-                //         )));
               },
             ),
             IconButton(
@@ -478,7 +404,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                     mapController!.zoom);
                               },
                               onMapEvent: (MapEvent p0) {
-                                // print(p0);
+                                // ユーザーが自ら地図を動かした際に現在地の移動をトラッキングしないようにする
                                 if (p0 is MapEventMove &&
                                     p0.source == MapEventSource.onDrag) {
                                   isTracking = false;
@@ -491,7 +417,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                 print("position changed");
                               },
                               onTap: (tapPosition, point) {
-                                print("tapped");
+                                // タップした位置にピンを指す(２回タップすると１回目の場所は消える)
                                 setPickedMarker(point);
                                 setState(() {});
                               },
@@ -508,6 +434,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               markers: [
                                 pickedMarker ?? emptyMarker,
                                 activeMarker ?? emptyMarker,
+                                searchResultMarker ?? emptyMarker,
                                 ...acitvePointMarkerList,
                                 (currentLocation.latitude != 0 &&
                                         currentLocation.longitude != 0)
@@ -515,7 +442,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                         point: LatLng(currentLocation.latitude,
                                             currentLocation.longitude),
                                         builder: (context) {
-                                          print("current location marker");
                                           print(
                                               "controller rotation: ${mapController!.rotation}");
                                           return RotationTransition(
@@ -539,33 +465,41 @@ class _MapScreenState extends ConsumerState<MapScreen>
               Align(
                 alignment: AlignmentDirectional.topCenter,
                 child: Container(
-                  decoration: BoxDecoration(color: Colors.white),
+                  decoration: const BoxDecoration(color: Colors.white),
                   child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Container(
-                          padding: ConstantValue.p8,
-                          height: 66,
-                          width: MediaQuery.of(context).size.width - 80,
-                          child: TextField(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 8),
+                          // height: 60,
+                          width: MediaQuery.of(context).size.width - 60,
+                          child: TextFormField(
+                              // textInputAction: TextInputAction.search,
+                              onFieldSubmitted: (value) => searchPlace(value),
                               controller: searchInputController,
                               style: const TextStyle(fontSize: 18),
                               decoration: InputDecoration(
-                                  contentPadding: ConstantValue.p8,
+                                  contentPadding:
+                                      const EdgeInsets.fromLTRB(8, 0, 0, 0),
                                   hintText: "場所を検索",
                                   border: OutlineInputBorder(
                                       borderRadius:
                                           BorderRadius.circular(10)))),
                         ),
-                        !isSearching
-                            ? IconButton(
-                                icon: Icon(Icons.search_outlined),
-                                onPressed: () {
-                                  print(searchInputController.text);
-                                  searchPlace(searchInputController.text);
-                                },
-                              )
-                            : CircularProgressIndicator()
+                        Container(
+                          width: 50,
+                          height: 50,
+                          child: !isSearching
+                              ? IconButton(
+                                  icon: const Icon(Icons.search_outlined),
+                                  onPressed: () {
+                                    searchPlace(searchInputController.text);
+                                  },
+                                )
+                              : SearchingWidget(),
+                        )
                       ]),
                 ),
               ),
@@ -594,31 +528,60 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             double lon = itemData['geometry']['location']['lng']
                                 as double;
 
-                            return Card(
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10)),
-                              child: GestureDetector(
-                                onTap: () {
+                            return VisibilityDetector(
+                              key: Key("searchResult:${index.toString()}"),
+                              onVisibilityChanged: (visilityInfo) {
+                                if (visilityInfo.visibleFraction == 1) {
                                   isTracking = false;
-                                  setState(() {});
+                                  searchResultMarker = Marker(
+                                      point: LatLng(lat, lon),
+                                      builder: (context) => RotationTransition(
+                                            turns: AlwaysStoppedAnimation(-1 *
+                                                (mapController!.rotation /
+                                                    360)),
+                                            child: GestureDetector(
+                                              child: const Icon(
+                                                Icons.location_pin,
+                                                color: Colors.deepOrange,
+                                              ),
+                                            ),
+                                          ));
                                   mapController!.move(
                                       LatLng(lat, lon), mapController!.zoom);
-                                },
-                                child: Container(
-                                  padding: ConstantValue.cardPadding,
-                                  width:
-                                      MediaQuery.of(context).size.width * 0.8,
-                                  height: 200,
-                                  child: Column(children: [
-                                    Text(
-                                      building_name,
-                                      style: ConstantValue.titleText,
-                                    ),
-                                    Text(
-                                      address,
-                                      style: TextStyle(fontSize: 14),
-                                    )
-                                  ]),
+                                  setState(() {});
+                                }
+                              },
+                              child: Card(
+                                margin: EdgeInsets.fromLTRB(
+                                    index == 0 ? 24 : 16,
+                                    0,
+                                    index == searchResult!.length - 1 ? 24 : 0,
+                                    0),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10)),
+                                child: GestureDetector(
+                                  onTap: () {
+                                    isTracking = false;
+                                    setState(() {});
+                                    mapController!.move(
+                                        LatLng(lat, lon), mapController!.zoom);
+                                  },
+                                  child: Container(
+                                    padding: ConstantValue.cardPadding,
+                                    width:
+                                        MediaQuery.of(context).size.width * 0.8,
+                                    height: 200,
+                                    child: Column(children: [
+                                      Text(
+                                        building_name,
+                                        style: ConstantValue.titleText,
+                                      ),
+                                      Text(
+                                        address,
+                                        style: const TextStyle(fontSize: 14),
+                                      )
+                                    ]),
+                                  ),
                                 ),
                               ),
                             );
@@ -698,7 +661,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     child: const Icon(Icons.add),
                   )
                 : Container(),
-            SizedBox(
+            const SizedBox(
               height: 12,
             ),
             FloatingActionButton(
@@ -713,6 +676,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
             ),
           ],
         ));
+  }
+
+  Widget SearchingWidget() {
+    return Center(child: CircularProgressIndicator());
   }
 }
 
