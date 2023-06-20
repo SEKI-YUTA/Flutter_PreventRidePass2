@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:path/path.dart';
 import 'package:prevent_ride_pass2/ConstantValue.dart';
 import 'package:prevent_ride_pass2/model/Point.dart';
+import 'package:prevent_ride_pass2/model/RoutePass.dart';
 import 'package:prevent_ride_pass2/notification_screen.dart';
 import 'package:prevent_ride_pass2/util/RequirePemisson.dart';
 import 'package:sqflite/sqflite.dart';
@@ -25,16 +26,42 @@ class GeneralUtil {
     return insertedId;
   }
 
+  static Future<int> insertRoute(Database database, RoutePass r) async {
+    int insertedId = -1;
+    if (database == null) return insertedId;
+    await database.transaction((txn) async {
+      insertedId = await txn.rawInsert(
+          "insert into ${ConstantValue.routeTable} (name, pointIdsStr) values (?, ?)",
+          [r.name, r.pointIdsStr]);
+    });
+    return insertedId;
+  }
+
   static Future<List<Point>> readAllPointFromDB(Database db) async {
     // static Future<List<Point>> readAllPointFromDB(Database db) async {
     List<Point> pointList = [];
     Future<List> list =
         db.rawQuery("select * from ${ConstantValue.pointTable}");
     return list.then((value) => List.generate(value.length, (idx) {
+          int id = value[idx]["id"];
           String name = value[idx]["name"];
           double latitiude = double.parse(value[idx]["latitude"]);
           double longitude = double.parse(value[idx]["longitude"]);
-          return Point(name: name, latitude: latitiude, longitude: longitude);
+          return Point(
+              id: id, name: name, latitude: latitiude, longitude: longitude);
+        }));
+  }
+
+  static Future<List<RoutePass>> readAllRouteFromDB(Database db) async {
+    // static Future<List<Point>> readAllPointFromDB(Database db) async {
+    List<RoutePass> routeList = [];
+    Future<List> list =
+        db.rawQuery("select * from ${ConstantValue.routeTable}");
+    return list.then((value) => List.generate(value.length, (idx) {
+          int id = value[idx]["id"];
+          String name = value[idx]["name"];
+          String pointIdsStr = value[idx]["pointIdsStr"];
+          return RoutePass(id: id, name: name, pointIdsStr: pointIdsStr);
         }));
   }
 
@@ -46,7 +73,7 @@ class GeneralUtil {
       await db.execute(
           "create table ${ConstantValue.pointTable} (id INTEGER PRIMARY KEY, name TEXT, latitude TEXT, longitude TEXT)");
       await db.execute(
-          "create table ${ConstantValue.routeTable} (id INTEGER PRIMARY KEY, name TEXT, latitude TEXT, longitude TEXT)");
+          "create table ${ConstantValue.routeTable} (id INTEGER PRIMARY KEY, name TEXT, pointIdsStr TEXT)");
     });
 
     return database;
@@ -119,11 +146,14 @@ class GeneralUtil {
       bool playSound = true,
       bool vib = true}) {
     final flnp = FlutterLocalNotificationsPlugin();
+    final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+        FlutterLocalNotificationsPlugin();
+
+    final AndroidInitializationSettings androidSetting =
+        AndroidInitializationSettings('location_target');
     return flnp
         .initialize(
-          InitializationSettings(
-            android: AndroidInitializationSettings('location_target'),
-          ),
+          InitializationSettings(android: androidSetting),
           // onDidReceiveNotificationResponse: (details) {
           //   onDidReceiveLocalNotification(id, title, body, "", context);
           // },

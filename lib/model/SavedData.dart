@@ -1,5 +1,5 @@
 import 'package:prevent_ride_pass2/model/Point.dart';
-import 'package:prevent_ride_pass2/model/Route.dart';
+import 'package:prevent_ride_pass2/model/RoutePass.dart';
 
 class SavedData {
   List<Point> pointList;

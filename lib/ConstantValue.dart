@@ -21,4 +21,19 @@ class ConstantValue {
   }
 
   static Setting defaultSetting = Setting(thMeter: 500, faliled: true);
+  static Widget locationMarker1 = Container(
+    width: 30,
+    height: 30,
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(15),
+    ),
+    child: Center(
+        child: Container(
+      width: 20,
+      height: 20,
+      decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10), color: Colors.blueAccent),
+    )),
+  );
 }

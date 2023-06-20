@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:prevent_ride_pass2/model/RoutePass.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -163,6 +165,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
         // injectProvider();
       }
     }
+    FlutterLocalNotificationsPlugin flp = FlutterLocalNotificationsPlugin();
+    final bool? result = await flp
+        .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin>()
+        ?.requestPermissions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+    print("notification result: $result");
     var notificationState = await ph.Permission.notification.status;
     if (!(notificationState == ph.PermissionStatus.denied)) {
       hasNotificationPermission = true;
@@ -183,6 +195,26 @@ class _MapScreenState extends ConsumerState<MapScreen>
         // injectProvider();
       }
     }
+    // var notificationState = await ph.Permission.notification.status;
+    // if (!(notificationState == ph.PermissionStatus.denied)) {
+    //   hasNotificationPermission = true;
+    //   print("has notification permission");
+    //   // injectProvider();
+    // } else {
+    //   var request = await ph.Permission.notification.request();
+    //   print(request);
+    //   if (request == ph.PermissionStatus.denied ||
+    //       request == ph.PermissionStatus.permanentlyDenied) {
+    //     // ignore: use_build_context_synchronously
+    //     GeneralUtil.showExitDialog(context, RequirePermission.notification, () {
+    //       exit(1);
+    //     });
+    //   } else {
+    //     print("arrowed notification permission");
+    //     hasNotificationPermission = true;
+    //     // injectProvider();
+    //   }
+    // }
     if (hasNotificationPermission && locationEnabled) injectProvider();
     Future f = Future.wait([
       networkConnectFuture,
@@ -203,7 +235,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
               type: 1,
               db: database!,
               savedDataProvider: savedDataProvider,
-              pointList: ref.read(savedDataProvider).pointList,
             )));
     // 今の段階では値を受け取ていないが将来的に使う事になりそう
     if (result == null) return;
@@ -258,6 +289,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
       Location location = Location();
       location.enableBackgroundMode(enable: true);
+      print("XXX");
+      location.getLocation().then((value) {
+        print("got location");
+        ref.read(currentLocationProvider.notifier).state = CurrentLocation(
+            latitude: value.latitude!, longitude: value.longitude!);
+      });
 
       return location.onLocationChanged.map((LocationData locationData) {
         print(
@@ -308,20 +345,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
       database ??= await GeneralUtil.getAppDatabase();
       // Future<List<Map<String, dynamic>>> dataList =
       late SavedData data;
-      Future f1 = database!
-          .rawQuery("select * from ${ConstantValue.pointTable}")
-          .then((value) {
-        List<Point> pointList = List.generate(value.length, (index) {
-          String name = value[index]["name"] as String;
-          double latitude = double.parse(value[index]["latitude"] as String);
-          double longitude = double.parse(value[index]["longitude"] as String);
-          return Point(name: name, latitude: latitude, longitude: longitude);
-        });
-        data = SavedData(pointList: pointList, routeList: []);
-        ref.read(savedDataProvider.notifier).state = data;
-      });
-
-      await f1;
+      List<Point> pointList = await GeneralUtil.readAllPointFromDB(database!);
+      List<RoutePass> routeList =
+          await GeneralUtil.readAllRouteFromDB(database!);
+      print("xxxx: ${pointList.length}");
+      data = SavedData(pointList: pointList, routeList: routeList);
+      ref.read(savedDataProvider.notifier).state = data;
       return Future.value(data);
     });
   }
@@ -444,7 +473,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           type: 2,
                           db: database!,
                           savedDataProvider: savedDataProvider,
-                          pointList: [],
                         )));
               },
             ),
@@ -458,72 +486,79 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           currentLocation.longitude == 0
                   ? const LoadingWidget()
                   : networkConnect
-                      ? FlutterMap(
-                          mapController: mapController,
-                          options: MapOptions(
-                              zoom: 15,
-                              onMapReady: () {
-                                print("on Map ready");
-                                isMapReady = true;
-                                mapController!.move(
-                                    LatLng(currentLocation.latitude,
-                                        currentLocation.longitude),
-                                    mapController!.zoom);
-                              },
-                              onMapEvent: (MapEvent p0) {
-                                // ユーザーが自ら地図を動かした際に現在地の移動をトラッキングしないようにする
-                                if (p0 is MapEventMove &&
-                                    p0.source == MapEventSource.onDrag) {
-                                  isTracking = false;
+                      ? Positioned(
+                          top: 60,
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          child: FlutterMap(
+                            mapController: mapController,
+                            options: MapOptions(
+                                zoom: 15,
+                                onMapReady: () {
+                                  print("on Map ready");
+                                  isMapReady = true;
+                                  mapController!.move(
+                                      LatLng(currentLocation.latitude,
+                                          currentLocation.longitude),
+                                      mapController!.zoom);
+                                },
+                                onMapEvent: (MapEvent p0) {
+                                  // ユーザーが自ら地図を動かした際に現在地の移動をトラッキングしないようにする
+                                  if (p0 is MapEventMove &&
+                                      p0.source == MapEventSource.onDrag) {
+                                    isTracking = false;
+                                    setState(() {});
+                                  }
+                                },
+                                center: LatLng(currentLocation.latitude,
+                                    currentLocation.longitude),
+                                onPositionChanged: (position, hasGesture) {
+                                  print("position changed");
+                                },
+                                onTap: (tapPosition, point) {
+                                  // タップした位置にピンを指す(２回タップすると１回目の場所は消える)
+                                  setPickedMarker(point);
                                   setState(() {});
-                                }
-                              },
-                              center: LatLng(currentLocation.latitude,
-                                  currentLocation.longitude),
-                              onPositionChanged: (position, hasGesture) {
-                                print("position changed");
-                              },
-                              onTap: (tapPosition, point) {
-                                // タップした位置にピンを指す(２回タップすると１回目の場所は消える)
-                                setPickedMarker(point);
-                                setState(() {});
-                              },
-                              interactiveFlags: InteractiveFlag.all,
-                              enableScrollWheel: true,
-                              scrollWheelVelocity: 0.00001),
-                          children: [
-                            TileLayer(
-                              urlTemplate:
-                                  // 'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
-                                  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                            ),
-                            MarkerLayer(
-                              markers: [
-                                pickedMarker ?? emptyMarker,
-                                activeMarker ?? emptyMarker,
-                                searchResultMarker ?? emptyMarker,
-                                ...acitvePointMarkerList,
-                                (currentLocation.latitude != 0 &&
-                                        currentLocation.longitude != 0)
-                                    ? Marker(
-                                        point: LatLng(currentLocation.latitude,
-                                            currentLocation.longitude),
-                                        builder: (context) {
-                                          print(
-                                              "controller rotation: ${mapController!.rotation}");
-                                          return RotationTransition(
-                                            turns: AlwaysStoppedAnimation(-1 *
-                                                (mapController!.rotation /
-                                                    360)),
-                                            child: const Icon(
-                                                Icons.person_pin_outlined),
-                                          );
-                                        },
-                                      )
-                                    : emptyMarker
-                              ],
-                            )
-                          ],
+                                },
+                                interactiveFlags: InteractiveFlag.all,
+                                enableScrollWheel: true,
+                                scrollWheelVelocity: 0.00001),
+                            children: [
+                              TileLayer(
+                                urlTemplate:
+                                    // 'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
+                                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                              ),
+                              MarkerLayer(
+                                markers: [
+                                  pickedMarker ?? emptyMarker,
+                                  activeMarker ?? emptyMarker,
+                                  searchResultMarker ?? emptyMarker,
+                                  ...acitvePointMarkerList,
+                                  (currentLocation.latitude != 0 &&
+                                          currentLocation.longitude != 0)
+                                      ? Marker(
+                                          point: LatLng(
+                                              currentLocation.latitude,
+                                              currentLocation.longitude),
+                                          builder: (context) {
+                                            print(
+                                                "controller rotation: ${mapController!.rotation}");
+                                            return RotationTransition(
+                                              turns: AlwaysStoppedAnimation(-1 *
+                                                  (mapController!.rotation /
+                                                      360)),
+                                              child:
+                                                  ConstantValue.locationMarker1,
+                                            );
+                                          },
+                                        )
+                                      : emptyMarker
+                                ],
+                              )
+                            ],
+                          ),
                         )
                       : Center(
                           child: Text(
@@ -623,6 +658,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                   if (visilityInfo.visibleFraction == 1) {
                                     isTracking = false;
                                     setSearchResultMarker(Point(
+                                        id: -1,
                                         name: "",
                                         latitude: lat,
                                         longitude: lon));
@@ -701,21 +737,23 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                     print(
                                         "latitude: ${pickedMarker?.point.latitude} longitude: ${pickedMarker?.point.longitude}");
                                     Point p = Point(
+                                        id: -1,
                                         name: editingController.text,
                                         latitude: pickedMarker!.point.latitude,
                                         longitude:
                                             pickedMarker!.point.longitude);
                                     print("add point: ${p.toString()}");
                                     // insertPoint(p);
-                                    GeneralUtil.insertPoint(database!, p);
-                                    List<Point> tmpList = savedData.pointList;
-                                    tmpList.add(p);
-                                    print("tmp list size: ${tmpList.length}");
-                                    savedDataController.state = SavedData(
-                                        pointList: tmpList,
-                                        routeList: savedData.routeList);
-                                    print(
-                                        "inserted length: ${savedDataController.state.pointList.length}");
+                                    GeneralUtil.insertPoint(database!, p)
+                                        .then((newId) {
+                                      List<Point> tmpList = savedData.pointList;
+                                      p.id = newId;
+                                      tmpList.add(p);
+                                      print("tmp list size: ${tmpList.length}");
+                                      savedDataController.state = SavedData(
+                                          pointList: tmpList,
+                                          routeList: savedData.routeList);
+                                    });
                                     Navigator.of(context).pop();
                                   },
                                   child: const Text("追加")),
@@ -753,6 +791,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   ? Icons.my_location_outlined
                   : Icons.location_disabled_outlined),
               onPressed: () {
+                print("loading: $loading");
+
                 isTracking = true;
                 setState(() {});
               },
