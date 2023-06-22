@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:prevent_ride_pass2/util/NotificationHelper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -163,26 +164,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
         // injectProvider();
       }
     }
-    var notificationState = await ph.Permission.notification.status;
-    if (!(notificationState == ph.PermissionStatus.denied)) {
-      hasNotificationPermission = true;
-      print("has notification permission");
-      // injectProvider();
-    } else {
-      var request = await ph.Permission.notification.request();
-      print(request);
-      if (request == ph.PermissionStatus.denied ||
-          request == ph.PermissionStatus.permanentlyDenied) {
-        // ignore: use_build_context_synchronously
-        GeneralUtil.showExitDialog(context, RequirePermission.notification, () {
-          exit(1);
-        });
-      } else {
-        print("arrowed notification permission");
-        hasNotificationPermission = true;
-        // injectProvider();
-      }
-    }
+    // PermissionStatus locationState = await Location().requestPermission();
+    // if (locationState == PermissionStatus.granted ||
+    //     locationState == PermissionStatus.grantedLimited) {
+    //   locationEnabled = true;
+    // }
+    NotificationHelper.setUpNotification();
+    hasNotificationPermission =
+        (await NotificationHelper.checkNotificationPermission())!;
     if (hasNotificationPermission && locationEnabled) injectProvider();
     Future f = Future.wait([
       networkConnectFuture,
@@ -284,11 +273,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
           if (distance <= setting.thMeter && !point.isRinged) {
             // if (distance <= Setting.th_meter && !point.isRinged) {
             print("通知を出す処理");
-            GeneralUtil.notify(
-              title: "${point.name}に近づきました",
-              body: "目的地に近づきました",
-              id: point.latitude.toInt(),
-            );
+            // GeneralUtil.notify(
+            //   title: "${point.name}に近づきました",
+            //   body: "目的地に近づきました",
+            //   id: point.latitude.toInt(),
+            // );
+            NotificationHelper.showNotificaton(
+                1, "${point.name}に近づきました", "目的地に近づきました", null);
             point.isRinged = true;
             point.isActive = false;
             int idx = savedData.pointList.indexOf(point);
@@ -355,11 +346,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     print("state $state");
     switch (state) {
       case AppLifecycleState.resumed:
-        print("resume");
         break;
       case AppLifecycleState.paused:
         saveSetting();
-        print("paused");
         break;
     }
   }
@@ -377,14 +366,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   Widget providedWidget() {
+    print("providedWidget");
     ref.watch(currentLocationStateProvider!);
-    ref.watch(savedDataStateProvider!);
+    ref.watch(savedDataStateProvider!); // これでこける
     final currentLocation = ref.watch(currentLocationProvider);
     final savedData = ref.watch(savedDataProvider);
     final savedDataController = ref.read(savedDataProvider.notifier);
-    // mapController.move(
-    //     LatLng(currentLocation.latitude, currentLocation.longitude), 12);
-    // print("build ${currentLocation.latitude} ${currentLocation.longitude}");
     if (isMapReady && isTracking) {
       mapController!.move(
           LatLng(currentLocation.latitude, currentLocation.longitude),
@@ -461,6 +448,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       ? FlutterMap(
                           mapController: mapController,
                           options: MapOptions(
+                              maxZoom: 18,
                               zoom: 15,
                               onMapReady: () {
                                 print("on Map ready");
