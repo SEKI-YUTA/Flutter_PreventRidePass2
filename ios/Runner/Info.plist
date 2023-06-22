@@ -61,6 +61,6 @@
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>always and when in use</string>
 	<key>UIBackgroundModes</key>
-	<string>ui background</string>
+	<string>location</string>
 </dict>
 </plist>
