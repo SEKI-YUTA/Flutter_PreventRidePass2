@@ -74,6 +74,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   List<Marker> acitvePointMarkerList = [];
   Marker emptyMarker =
       Marker(point: LatLng(0, 0), builder: (context) => Container());
+  Location? location;
 
   AutoDisposeStreamProvider<LocationData>? currentLocationStateProvider;
   AutoDisposeFutureProvider<SavedData>? savedDataStateProvider;
@@ -130,7 +131,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   void setUp() async {
-    // locationEnabled = await checkPermission();
     preferences = await SharedPreferences.getInstance();
     String? settingStr = preferences!.getString(ConstantValue.settingStrKey);
     print("settingStr: $settingStr");
@@ -145,10 +145,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
     Future<bool> networkConnectFuture = GeneralUtil.checkNetworkConnect();
     var locationState = await ph.Permission.location.status;
+    var locationAlwaysState = await ph.Permission.locationAlways.status;
+    var locationWhileInUseState = await ph.Permission.locationWhenInUse.status;
+    print("location permission ------");
+    print(locationState);
+    print(locationAlwaysState);
+    print(locationWhileInUseState);
+    print("location permission ------");
     if (!(locationState == ph.PermissionStatus.denied)) {
       locationEnabled = true;
       print("has location permission");
-      // injectProvider();
     } else {
       var request = await ph.Permission.location.request();
       print(request);
@@ -161,7 +167,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       } else {
         print("arrowed locaiton permission");
         locationEnabled = true;
-        // injectProvider();
       }
     }
     // PermissionStatus locationState = await Location().requestPermission();
@@ -194,7 +199,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
               savedDataProvider: savedDataProvider,
               pointList: ref.read(savedDataProvider).pointList,
             )));
-    // 今の段階では値を受け取ていないが将来的に使う事になりそう
     if (result == null) return;
     Point p = result as Point;
     LatLng? lng = pickedMarker?.point;
@@ -205,6 +209,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
     setActiveMarker(p);
     mapController!.move(LatLng(p.latitude, p.longitude), mapController!.zoom);
+    isTracking = false;
     setState(() {});
   }
 
@@ -213,7 +218,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     isSearching = true;
     setState(() {});
     String url = "${ConstantValue.GASbaseURL}?query= + $query";
-    return http.get(Uri.parse(url)).then((value) {
+    http.get(Uri.parse(url)).then((value) {
       Map<String, dynamic> jsonData = json.decode(value.body);
       List<dynamic> tmpList = (jsonData['results']);
       if (jsonData['status'].toLowerCase() == "ok") {
@@ -229,26 +234,28 @@ class _MapScreenState extends ConsumerState<MapScreen>
       searchResultShowing = true;
       setState(() {});
     });
+    return Future.value(null);
   }
 
-  void injectProvider() {
+  void injectProvider() async {
     print("injectProvider");
+    location = Location();
+    location!.enableBackgroundMode(enable: true);
     currentLocationStateProvider =
         StreamProvider.autoDispose<LocationData>((ref) {
-      // Geolocatorを使うコード
-      // LocationSettings locationSettings =
-      //     const LocationSettings(accuracy: LocationAccuracy.best);
-      // return Geolocator.getPositionStream(locationSettings: locationSettings)
-      //     .map((pos) {
-      //   ref.read(currentLocationProvider.notifier).state = pos;
-      //   print("lat: ${pos.latitude} lon: ${pos.longitude}");
-      //   return pos;
-      // });
+      print("ZZZ");
+      // おそらくこのスコープ内でこけてる
+      // backgroundで位置を取得するのに特殊な権限とかいりそう(iOS)
 
-      Location location = Location();
-      location.enableBackgroundMode(enable: true);
-
-      return location.onLocationChanged.map((LocationData locationData) {
+      // location
+      //     .serviceEnabled()
+      //     .then((value) => print("location enabled: $value"));
+      // try {
+      //   location.getLocation().then((value) => print(value));
+      // } catch (e) {
+      //   print("エラー発生");
+      // }
+      return location!.onLocationChanged.map((LocationData locationData) {
         print(
             "locationData latitude: ${locationData.latitude} longitude: ${locationData.longitude}");
         ref.read(currentLocationProvider.notifier).state = CurrentLocation(
@@ -273,11 +280,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
           if (distance <= setting.thMeter && !point.isRinged) {
             // if (distance <= Setting.th_meter && !point.isRinged) {
             print("通知を出す処理");
-            // GeneralUtil.notify(
-            //   title: "${point.name}に近づきました",
-            //   body: "目的地に近づきました",
-            //   id: point.latitude.toInt(),
-            // );
             NotificationHelper.showNotificaton(
                 1, "${point.name}に近づきました", "目的地に近づきました", null);
             point.isRinged = true;
@@ -296,6 +298,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     });
 
     savedDataStateProvider = FutureProvider.autoDispose<SavedData>((ref) async {
+      print("YYY");
       database ??= await GeneralUtil.getAppDatabase();
       // Future<List<Map<String, dynamic>>> dataList =
       late SavedData data;
@@ -335,9 +338,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   @override
   void dispose() {
+    super.dispose();
     WidgetsBinding.instance.removeObserver(this);
     mapController?.dispose();
-    super.dispose();
   }
 
   @override
@@ -346,9 +349,22 @@ class _MapScreenState extends ConsumerState<MapScreen>
     print("state $state");
     switch (state) {
       case AppLifecycleState.resumed:
+        setState(() {});
         break;
       case AppLifecycleState.paused:
         saveSetting();
+        List<Point> activePointList = ref
+            .read(savedDataProvider.notifier)
+            .state
+            .pointList
+            .where((ele) => ele.isActive)
+            .toList();
+        print("acitve location: ${activePointList.length}");
+        if (activePointList.length == 0) {
+          location!.enableBackgroundMode(enable: false);
+        } else {
+          location!.enableBackgroundMode(enable: true);
+        }
         break;
     }
   }
@@ -367,8 +383,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   Widget providedWidget() {
     print("providedWidget");
-    ref.watch(currentLocationStateProvider!);
     ref.watch(savedDataStateProvider!); // これでこける
+    ref.watch(currentLocationStateProvider!);
     final currentLocation = ref.watch(currentLocationProvider);
     final savedData = ref.watch(savedDataProvider);
     final savedDataController = ref.read(savedDataProvider.notifier);
@@ -422,19 +438,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 navigateToPointListScreen(context);
               },
             ),
-            IconButton(
-              icon: const Icon(Icons.route_outlined),
-              onPressed: () {
-                // 登録ルート一覧へ
-                Navigator.of(context).push(MaterialPageRoute(
-                    builder: (context) => PointListScreen(
-                          type: 2,
-                          db: database!,
-                          savedDataProvider: savedDataProvider,
-                          pointList: [],
-                        )));
-              },
-            ),
+            // 一旦ルート機能はなし
+            // IconButton(
+            //   icon: const Icon(Icons.route_outlined),
+            //   onPressed: () {
+            //     // 登録ルート一覧へ
+            //     Navigator.of(context).push(MaterialPageRoute(
+            //         builder: (context) => PointListScreen(
+            //               type: 2,
+            //               db: database!,
+            //               savedDataProvider: savedDataProvider,
+            //               pointList: [],
+            //             )));
+            //   },
+            // ),
           ],
         ),
         body: Center(

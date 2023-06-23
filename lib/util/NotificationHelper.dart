@@ -7,7 +7,7 @@ class NotificationHelper {
       FlutterLocalNotificationsPlugin();
   static void setUpNotification() {
     final AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('location_target');
     final DarwinInitializationSettings initializationSettingsDarwin =
         DarwinInitializationSettings(
       requestSoundPermission: false,
