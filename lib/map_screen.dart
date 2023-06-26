@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:prevent_ride_pass2/util/DBHelper.dart';
 import 'package:prevent_ride_pass2/util/NotificationHelper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
@@ -197,6 +198,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               type: 1,
               db: database!,
               savedDataProvider: savedDataProvider,
+              routeList: [],
               pointList: ref.read(savedDataProvider).pointList,
             )));
     if (result == null) return;
@@ -294,10 +296,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
           .rawQuery("select * from ${ConstantValue.pointTable}")
           .then((value) {
         List<Point> pointList = List.generate(value.length, (index) {
+          int id = value[index]["id"] as int;
           String name = value[index]["name"] as String;
           double latitude = double.parse(value[index]["latitude"] as String);
           double longitude = double.parse(value[index]["longitude"] as String);
-          return Point(name: name, latitude: latitude, longitude: longitude);
+          return Point(
+              id: id, name: name, latitude: latitude, longitude: longitude);
         });
         data = SavedData(pointList: pointList, routeList: []);
         ref.read(savedDataProvider.notifier).state = data;
@@ -618,6 +622,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                   if (visilityInfo.visibleFraction == 1) {
                                     isTracking = false;
                                     setSearchResultMarker(Point(
+                                        id: 0,
                                         name: "",
                                         latitude: lat,
                                         longitude: lon));
@@ -696,13 +701,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                     print(
                                         "latitude: ${pickedMarker?.point.latitude} longitude: ${pickedMarker?.point.longitude}");
                                     Point p = Point(
+                                        id: 0,
                                         name: editingController.text,
                                         latitude: pickedMarker!.point.latitude,
                                         longitude:
                                             pickedMarker!.point.longitude);
                                     print("add point: ${p.toString()}");
                                     // insertPoint(p);
-                                    GeneralUtil.insertPoint(database!, p);
+                                    DBHelper.insertPoint(database!, p);
                                     List<Point> tmpList = savedData.pointList;
                                     tmpList.add(p);
                                     print("tmp list size: ${tmpList.length}");
