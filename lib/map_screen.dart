@@ -510,8 +510,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                             turns: AlwaysStoppedAnimation(-1 *
                                                 (mapController!.rotation /
                                                     360)),
-                                            child: const Icon(
-                                                Icons.person_pin_outlined),
+                                            child:
+                                                ConstantValue.locationMarker1,
                                           );
                                         },
                                       )
