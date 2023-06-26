@@ -144,35 +144,35 @@ class _MapScreenState extends ConsumerState<MapScreen>
     database ??= await GeneralUtil.getAppDatabase();
 
     Future<bool> networkConnectFuture = GeneralUtil.checkNetworkConnect();
-    var locationState = await ph.Permission.location.status;
-    var locationAlwaysState = await ph.Permission.locationAlways.status;
-    var locationWhileInUseState = await ph.Permission.locationWhenInUse.status;
-    print("location permission ------");
-    print(locationState);
-    print(locationAlwaysState);
-    print(locationWhileInUseState);
-    print("location permission ------");
-    if (!(locationState == ph.PermissionStatus.denied)) {
+    Location location = Location();
+    PermissionStatus requestPermission = await location.requestPermission();
+    if (requestPermission == PermissionStatus.granted) {
       locationEnabled = true;
-      print("has location permission");
-    } else {
-      var request = await ph.Permission.location.request();
-      print(request);
-      if (request == ph.PermissionStatus.denied ||
-          request == ph.PermissionStatus.permanentlyDenied) {
-        // ignore: use_build_context_synchronously
-        GeneralUtil.showExitDialog(context, RequirePermission.location, () {
-          exit(1);
-        });
-      } else {
-        print("arrowed locaiton permission");
-        locationEnabled = true;
-      }
     }
-    // PermissionStatus locationState = await Location().requestPermission();
-    // if (locationState == PermissionStatus.granted ||
-    //     locationState == PermissionStatus.grantedLimited) {
+    // var locationState = await ph.Permission.location.status;
+    // var locationAlwaysState = await ph.Permission.locationAlways.status;
+    // var locationWhileInUseState = await ph.Permission.locationWhenInUse.status;
+    // print("location permission ------");
+    // print(locationState);
+    // print(locationAlwaysState);
+    // print(locationWhileInUseState);
+    // print("location permission ------");
+    // if (!(locationState == ph.PermissionStatus.denied)) {
     //   locationEnabled = true;
+    //   print("has location permission");
+    // } else {
+    //   var request = await ph.Permission.location.request();
+    //   print("request reusult: $request");
+    //   if (request == ph.PermissionStatus.denied ||
+    //       request == ph.PermissionStatus.permanentlyDenied) {
+    //     // ignore: use_build_context_synchronously
+    //     GeneralUtil.showExitDialog(context, RequirePermission.location, () {
+    //       exit(1);
+    //     });
+    //   } else {
+    //     print("arrowed locaiton permission");
+    //     locationEnabled = true;
+    //   }
     // }
     NotificationHelper.setUpNotification();
     hasNotificationPermission =
@@ -243,18 +243,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     location!.enableBackgroundMode(enable: true);
     currentLocationStateProvider =
         StreamProvider.autoDispose<LocationData>((ref) {
-      print("ZZZ");
-      // おそらくこのスコープ内でこけてる
-      // backgroundで位置を取得するのに特殊な権限とかいりそう(iOS)
-
-      // location
-      //     .serviceEnabled()
-      //     .then((value) => print("location enabled: $value"));
-      // try {
-      //   location.getLocation().then((value) => print(value));
-      // } catch (e) {
-      //   print("エラー発生");
-      // }
       return location!.onLocationChanged.map((LocationData locationData) {
         print(
             "locationData latitude: ${locationData.latitude} longitude: ${locationData.longitude}");
@@ -361,8 +349,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
             .toList();
         print("acitve location: ${activePointList.length}");
         if (activePointList.length == 0) {
+          print("swith to disable background mode");
           location!.enableBackgroundMode(enable: false);
         } else {
+          print("switch to enable background mode");
           location!.enableBackgroundMode(enable: true);
         }
         break;
@@ -586,13 +576,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 curve: Curves.bounceInOut,
                 child: GestureDetector(
                   onPanUpdate: (details) {
-                    if (details.delta.dy > 0) {
+                    if (details.delta.dy > 0 && details.delta.distance > 5) {
                       // 下方向にスワイプした時
                       print("hide");
                       searchResultShowing = false;
                       setState(() {});
                     }
-                    if (details.delta.dy < 0) {
+                    if (details.delta.dy < 0 && details.delta.distance > 5) {
                       // 上方向にスワイプしたとき
                       print("show");
                       searchResultShowing = true;
