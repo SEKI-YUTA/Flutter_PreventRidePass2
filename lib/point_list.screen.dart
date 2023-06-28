@@ -83,9 +83,10 @@ class _PointListScreenState extends ConsumerState<PointListScreen> {
                       setState(() {});
                       DBHelper.deletePointByID(widget.db, id);
                     },
-                    updateCallback: (int id, String newName) {
-                      print('update callback');
-                      DBHelper.updatePointByID(widget.db, id, newName);
+                    updateCallback: (int id, String newName) async {
+                      print('update callback update id: $id');
+                      int updateCount = await DBHelper.updatePointByID(
+                          widget.db, id, newName);
                     },
                   );
                 },

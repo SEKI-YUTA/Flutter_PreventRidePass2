@@ -377,7 +377,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   Widget providedWidget() {
     print("providedWidget");
-    ref.watch(savedDataStateProvider!); // これでこける
+    ref.watch(savedDataStateProvider!);
     ref.watch(currentLocationStateProvider!);
     final currentLocation = ref.watch(currentLocationProvider);
     final savedData = ref.watch(savedDataProvider);
@@ -391,21 +391,39 @@ class _MapScreenState extends ConsumerState<MapScreen>
     acitvePointMarkerList = savedData.pointList
         .where((element) => element.isActive || element.isRinged)
         .map((point) {
+      int distance = Geolocator.distanceBetween(point.latitude, point.longitude,
+              currentLocation.latitude, currentLocation.longitude)
+          .toInt();
       return Marker(
+        width: 60,
+        height: 60,
         point: LatLng(point.latitude, point.longitude),
-        builder: (context) => RotationTransition(
-          turns: AlwaysStoppedAnimation(-1 * (mapController!.rotation / 360)),
-          child: const Icon(
-            Icons.location_on_outlined,
-            color: Colors.red,
-          ),
-        ),
+        builder: (context) => ActiveMarkerChild(distance),
       );
+      // return Marker(
+      //   point: LatLng(point.latitude, point.longitude),
+      //   builder: (context) => RotationTransition(
+      //     turns: AlwaysStoppedAnimation(-1 * (mapController!.rotation / 360)),
+      //     child: Container(
+      //       width: 100,
+      //       child: Stack(
+      //         children: [
+      //           Icon(
+      //             Icons.location_on_outlined,
+      //             size: 40,
+      //             color: Colors.red,
+      //           ),
+      //           Container(
+      //             width: 100,
+      //             child: Text("$distance", textAlign: TextAlign.center),
+      //             decoration: BoxDecoration(color: Colors.white),
+      //           )
+      //         ],
+      //       ),
+      //     ),
+      //   ),
+      // );
     }).toList();
-
-    WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
-      print("postFrameCallback");
-    });
 
     return Scaffold(
         appBar: AppBar(
@@ -694,7 +712,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             title: const Text("場所を登録"),
                             actions: [
                               TextButton(
-                                  onPressed: () {
+                                  onPressed: () async {
                                     if (pickedMarker == null) return;
                                     // 追加
                                     print("name: " + editingController.text);
@@ -708,7 +726,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                             pickedMarker!.point.longitude);
                                     print("add point: ${p.toString()}");
                                     // insertPoint(p);
-                                    DBHelper.insertPoint(database!, p);
+                                    int insertedId = await DBHelper.insertPoint(
+                                        database!, p);
+                                    p.id = insertedId;
                                     List<Point> tmpList = savedData.pointList;
                                     tmpList.add(p);
                                     print("tmp list size: ${tmpList.length}");
@@ -760,5 +780,29 @@ class _MapScreenState extends ConsumerState<MapScreen>
             ),
           ],
         ));
+  }
+
+  Container ActiveMarkerChild(int distance) {
+    return Container(
+      child: Stack(
+        children: [
+          const Icon(
+            Icons.location_on_outlined,
+            size: 50,
+            color: Colors.red,
+          ),
+          Positioned(
+            bottom: 20,
+            child: Container(
+              decoration: BoxDecoration(color: Colors.white.withAlpha(140)),
+              child: Text(
+                "${distance}m",
+                textAlign: TextAlign.center,
+              ),
+            ),
+          )
+        ],
+      ),
+    );
   }
 }

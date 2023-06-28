@@ -52,9 +52,8 @@ class _PointCardState extends State<PointCard> {
                 child: const Text("編集"),
                 onTap: () {
                   // widget.updateCallback();
-                    titleEditEnabled = true;
-                  setState(() {
-                  });
+                  titleEditEnabled = true;
+                  setState(() {});
                 },
               )
             ]);
@@ -71,7 +70,7 @@ class _PointCardState extends State<PointCard> {
                   Container(
                     width: MediaQuery.of(context).size.width * 0.8,
                     child: TextField(
-                      onSubmitted: (text) {
+                      onSubmitted: (text) async {
                         _updateTitle(text);
                         widget.updateCallback(widget.p.id, text);
                         setState(() {
@@ -80,7 +79,8 @@ class _PointCardState extends State<PointCard> {
                       },
                       enabled: titleEditEnabled,
                       controller: editingController,
-                      style: ConstantValue.titleText,
+                      style:
+                          ConstantValue.titleText.copyWith(color: Colors.black),
                     ),
                   ),
                   IconButton(
