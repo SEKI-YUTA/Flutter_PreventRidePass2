@@ -156,31 +156,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         exit(1);
       });
     }
-    // var locationState = await ph.Permission.location.status;
-    // var locationAlwaysState = await ph.Permission.locationAlways.status;
-    // var locationWhileInUseState = await ph.Permission.locationWhenInUse.status;
-    // print("location permission ------");
-    // print(locationState);
-    // print(locationAlwaysState);
-    // print(locationWhileInUseState);
-    // print("location permission ------");
-    // if (!(locationState == ph.PermissionStatus.denied)) {
-    //   locationEnabled = true;
-    //   print("has location permission");
-    // } else {
-    //   var request = await ph.Permission.location.request();
-    //   print("request reusult: $request");
-    //   if (request == ph.PermissionStatus.denied ||
-    //       request == ph.PermissionStatus.permanentlyDenied) {
-    //     // ignore: use_build_context_synchronously
-    //     GeneralUtil.showExitDialog(context, RequirePermission.location, () {
-    //       exit(1);
-    //     });
-    //   } else {
-    //     print("arrowed locaiton permission");
-    //     locationEnabled = true;
-    //   }
-    // }
     NotificationHelper.setUpNotification();
     hasNotificationPermission =
         (await NotificationHelper.checkNotificationPermission())!;
@@ -192,8 +167,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (hasNotificationPermission && locationEnabled) injectProvider();
     Future f = Future.wait([
       networkConnectFuture,
-      // permissionStateFuture,
-      // notificationPermissionState
     ]);
     f.then((value) {
       List<bool> resultList = value as List<bool>;
@@ -420,29 +393,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         point: LatLng(point.latitude, point.longitude),
         builder: (context) => ActiveMarkerChild(distance),
       );
-      // return Marker(
-      //   point: LatLng(point.latitude, point.longitude),
-      //   builder: (context) => RotationTransition(
-      //     turns: AlwaysStoppedAnimation(-1 * (mapController!.rotation / 360)),
-      //     child: Container(
-      //       width: 100,
-      //       child: Stack(
-      //         children: [
-      //           Icon(
-      //             Icons.location_on_outlined,
-      //             size: 40,
-      //             color: Colors.red,
-      //           ),
-      //           Container(
-      //             width: 100,
-      //             child: Text("$distance", textAlign: TextAlign.center),
-      //             decoration: BoxDecoration(color: Colors.white),
-      //           )
-      //         ],
-      //       ),
-      //     ),
-      //   ),
-      // );
     }).toList();
 
     return Scaffold(
