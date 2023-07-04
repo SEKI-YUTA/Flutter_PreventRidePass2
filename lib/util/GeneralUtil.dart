@@ -13,10 +13,6 @@ import 'package:sqflite/sqflite.dart';
 // https://github.com/Baseflow/flutter-geolocator/issues/1212
 
 class GeneralUtil {
-  
-
-  
-
   static Future<Database> getAppDatabase() async {
     String dbPath = await getDatabasesPath();
     String path = join(dbPath, ConstantValue.dbName);
@@ -148,11 +144,10 @@ class GeneralUtil {
     );
   }
 
-  static void showExitDialog(BuildContext context, RequirePermission permission,
-      VoidCallback exitCallback) {
-    String permissionStr =
-        permission == RequirePermission.location ? "現在位置へのアクセス権限" : "通知の権限";
+  static void showExitDialog(
+      BuildContext context, String message, VoidCallback exitCallback) {
     showDialog(
+      barrierDismissible: true,
       context: context,
       builder: (context) {
         return AlertDialog(
@@ -160,7 +155,7 @@ class GeneralUtil {
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
-              children: [Text("$permissionStrを許可してください")]),
+              children: [Text(message)]),
           actions: [
             TextButton(
                 onPressed: () {

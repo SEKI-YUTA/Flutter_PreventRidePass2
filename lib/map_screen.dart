@@ -49,6 +49,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   // late Database database;
   MapController? mapController;
   // 権限関連
+  bool backgroundLocationEnabled = false;
   bool locationEnabled = false;
   bool hasNotificationPermission = false;
   // ネットに接続されているか
@@ -147,8 +148,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
     Future<bool> networkConnectFuture = GeneralUtil.checkNetworkConnect();
     Location location = Location();
     PermissionStatus requestPermission = await location.requestPermission();
+    print("location permission: ${requestPermission}");
     if (requestPermission == PermissionStatus.granted) {
       locationEnabled = true;
+    } else {
+      GeneralUtil.showExitDialog(context, "現在位置へのアクセスが必須です", () {
+        exit(1);
+      });
     }
     // var locationState = await ph.Permission.location.status;
     // var locationAlwaysState = await ph.Permission.locationAlways.status;
@@ -178,6 +184,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
     NotificationHelper.setUpNotification();
     hasNotificationPermission =
         (await NotificationHelper.checkNotificationPermission())!;
+    if (!hasNotificationPermission) {
+      GeneralUtil.showExitDialog(context, "通知へのアクセスを許可してください", () {
+        exit(1);
+      });
+    }
     if (hasNotificationPermission && locationEnabled) injectProvider();
     Future f = Future.wait([
       networkConnectFuture,
@@ -242,7 +253,19 @@ class _MapScreenState extends ConsumerState<MapScreen>
   void injectProvider() async {
     print("injectProvider");
     location = Location();
-    location!.enableBackgroundMode(enable: true);
+    backgroundLocationEnabled = false;
+    try {
+      backgroundLocationEnabled =
+          await location!.enableBackgroundMode(enable: true);
+    } catch (e) {
+      backgroundLocationEnabled = false;
+    }
+    // backgroundLocationEnabled = await location!.isBackgroundModeEnabled();
+    if (backgroundLocationEnabled) {
+      location!.enableBackgroundMode(enable: true);
+    } else {
+      location!.enableBackgroundMode(enable: false);
+    }
     currentLocationStateProvider =
         StreamProvider.autoDispose<LocationData>((ref) {
       return location!.onLocationChanged.map((LocationData locationData) {
@@ -288,7 +311,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     });
 
     savedDataStateProvider = FutureProvider.autoDispose<SavedData>((ref) async {
-      print("YYY");
       database ??= await GeneralUtil.getAppDatabase();
       // Future<List<Map<String, dynamic>>> dataList =
       late SavedData data;
@@ -352,12 +374,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
             .where((ele) => ele.isActive)
             .toList();
         print("acitve location: ${activePointList.length}");
-        if (activePointList.length == 0) {
-          print("swith to disable background mode");
-          location!.enableBackgroundMode(enable: false);
-        } else {
-          print("switch to enable background mode");
+        if (activePointList.length > 0 && backgroundLocationEnabled) {
           location!.enableBackgroundMode(enable: true);
+        } else {
+          location!.enableBackgroundMode(enable: false);
         }
         break;
     }
@@ -553,41 +573,59 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 alignment: AlignmentDirectional.topCenter,
                 child: Container(
                   decoration: const BoxDecoration(color: Colors.white),
-                  child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 8),
-                          // height: 60,
-                          width: MediaQuery.of(context).size.width - 60,
-                          child: TextFormField(
-                              // textInputAction: TextInputAction.search,
-                              onFieldSubmitted: (value) => searchPlace(value),
-                              controller: searchInputController,
-                              style: const TextStyle(fontSize: 18),
-                              decoration: InputDecoration(
-                                  contentPadding:
-                                      const EdgeInsets.fromLTRB(8, 0, 0, 0),
-                                  hintText: "場所を検索",
-                                  border: OutlineInputBorder(
-                                      borderRadius:
-                                          BorderRadius.circular(10)))),
-                        ),
-                        Container(
-                          width: 50,
-                          height: 50,
-                          child: !isSearching
-                              ? IconButton(
-                                  icon: const Icon(Icons.search_outlined),
-                                  onPressed: () {
-                                    searchPlace(searchInputController.text);
-                                  },
-                                )
-                              : Center(child: CircularProgressIndicator()),
-                        )
-                      ]),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 8),
+                              // height: 60,
+                              width: MediaQuery.of(context).size.width - 60,
+                              child: TextFormField(
+                                  // textInputAction: TextInputAction.search,
+                                  onFieldSubmitted: (value) =>
+                                      searchPlace(value),
+                                  controller: searchInputController,
+                                  style: const TextStyle(fontSize: 18),
+                                  decoration: InputDecoration(
+                                      contentPadding:
+                                          const EdgeInsets.fromLTRB(8, 0, 0, 0),
+                                      hintText: "場所を検索",
+                                      border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(10)))),
+                            ),
+                            Container(
+                              width: 50,
+                              height: 50,
+                              child: !isSearching
+                                  ? IconButton(
+                                      icon: const Icon(Icons.search_outlined),
+                                      onPressed: () {
+                                        searchPlace(searchInputController.text);
+                                      },
+                                    )
+                                  : const Center(
+                                      child: CircularProgressIndicator()),
+                            )
+                          ]),
+                      backgroundLocationEnabled
+                          ? Container()
+                          : Container(
+                              padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
+                              child: const Text(
+                                "バックグラウンドでの位置情報の取得が許可されていません",
+                                style: TextStyle(
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                    ],
+                  ),
                 ),
               ),
               AnimatedPositioned(
